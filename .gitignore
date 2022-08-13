@@ -1,0 +1,16 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/prototype-router
+prototype-router.so
+prototype-router.dylib
+prototype-router.dll
+prototype-router.a
+prototype-router.lib
+prototype-router-test-*
+*.exe
+*.o
+*.obj
+*.lst
+*.pdb
