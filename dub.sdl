@@ -1,4 +1,4 @@
-name "prototype-router"
+name "typed-router"
 description "A minimal D application."
 authors "Kyle Ingraham"
 copyright "Copyright © 2022, Kyle Ingraham"
