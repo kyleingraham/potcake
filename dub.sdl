@@ -5,4 +5,5 @@ copyright "Copyright © 2022, Kyle Ingraham"
 license "proprietary"
 
 dependency "pegged" version="~>0.4.6"
-dependency "vibe-d": "~>0.9.5"
+dependency "vibe-d" version="~>0.9.5"
+lflags "-L/opt/local/lib/openssl-1.1" platform="osx"
