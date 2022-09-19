@@ -46,6 +46,28 @@ struct SlugConverter
     }
 }
 
+struct UUIDConverter
+{
+    import std.uuid : UUID;
+
+    enum regex = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+
+    UUID toD(const string value) @safe
+    {
+        return UUID(value);
+    }
+}
+
+struct URLPathConverter
+{
+    enum regex = ".+";
+
+    string toD(const string value) @safe
+    {
+        return value;
+    }
+}
+
 struct PathCaptureGroup
 {
     string converterPathName;
@@ -87,31 +109,36 @@ BoundPathConverter bindPathConverter(alias pathConverter, string converterPathNa
     return BoundPathConverter(moduleName!pathConverter, __traits(identifier, pathConverter), converterPathName);
 }
 
-template pathConverterMap(BoundPathConverters...)
+template pathConverterMap(BoundPathConverter[] boundPathConverters)
 {
-    import std.algorithm.iteration : joiner;
-    import std.array : array;
-    import std.range : only;
-
-    enum boundPathConverters = BoundPathConverters.only.joiner.array;
-
     PathConverterRef[string] pathConverterMap() @safe
     {
         mixin("PathConverterRef[string] converters;");
 
-        static foreach (boundPathConverter; boundPathConverters)
+        static foreach_reverse (boundPathConverter; boundPathConverters)
         {
             mixin("import " ~ boundPathConverter.moduleName ~ " : " ~ boundPathConverter.objectName ~ ";");
-            mixin("converters[\"" ~ boundPathConverter.converterPathName ~ "\"] = PathConverterRef(cast(void*) new " ~
-            boundPathConverter.objectName ~ ");");
+            mixin("converters[\"" ~ boundPathConverter.converterPathName ~ "\"] = PathConverterRef(cast(void*) new " ~ boundPathConverter.objectName ~ ");");
         }
 
         return mixin("converters");
     }
 }
 
-template TypedURLRouter(BoundPathConverters...)
+template TypedURLRouter(BoundPathConverter[] userPathConverters = [])
 {
+    import std.array : join;
+
+    enum boundPathConverters = [
+        userPathConverters, [
+            bindPathConverter!(IntConverter, "int"),
+            bindPathConverter!(StringConverter, "string"),
+            bindPathConverter!(SlugConverter, "slug"),
+            bindPathConverter!(UUIDConverter, "uuid"),
+            bindPathConverter!(URLPathConverter, "path"),
+        ]
+    ].join;
+
     ParsedPath parsePath(string path, bool isEndpoint=false)()
     {
         import pegged.grammar;
@@ -188,12 +215,6 @@ Path:
         return "(?P<" ~ pathParameter ~ ">" ~ mixin(getBoundPathConverter!(converterPathName).objectName ~ ".regex") ~ ")";
     }
 
-    import std.algorithm.iteration : joiner;
-    import std.array : array;
-    import std.range : only;
-
-    enum boundPathConverters = BoundPathConverters.only.joiner.array;
-
     BoundPathConverter getBoundPathConverter(string pathName)()
     {
         foreach (boundPathConverter; boundPathConverters)
@@ -212,7 +233,7 @@ Path:
 
         this()
         {
-            // TODO: Register only if not already registered
+            // TODO: Test we prioritize user converters
             pathConverters = pathConverterMap!boundPathConverters;
         }
 
@@ -225,7 +246,7 @@ Path:
                 auto matches = matchAll(req.path, route.pathRegex);
 
                 if (matches.empty())
-                    continue ;
+                    continue;
 
                 foreach (i; 0 .. route.pathRegex.namedCaptures.length)
                 {
@@ -263,6 +284,7 @@ Path:
             };
 
             auto methodPresent = method in routes;
+
             if (methodPresent is null)
                 routes[method] = [];
 
@@ -284,7 +306,7 @@ void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int a
 <html lang="en">
     <head></head>
     <body>
-        Hello, ` ~ name ~ `. You are ` ~ to!string(age) ~ ` years old.
+        Hello, ` ~ name ~ `. You are ` ~ to!string(age) ~ ` months old.
     </body>
 </html>`,
     HTTPStatus.ok);
@@ -292,12 +314,7 @@ void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int a
 
 int main()
 {
-    enum allConverters = [
-        bindPathConverter!(IntConverter, "int"),
-        bindPathConverter!(StringConverter, "string"),
-    ];
-
-    auto router = new TypedURLRouter!allConverters;
+    auto router = new TypedURLRouter!();
     router.get!"/hello/<name>/<int:age>/"(&helloUser);
 
     auto settings = new HTTPServerSettings;
