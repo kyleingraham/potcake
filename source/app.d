@@ -26,7 +26,7 @@ struct IntConverter
     }
 }
 
-struct StringConverter
+class StringConverter
 {
     enum regex = "[^/]+";
 
@@ -36,14 +36,9 @@ struct StringConverter
     }
 }
 
-struct SlugConverter
+class SlugConverter : StringConverter
 {
     enum regex = "[-a-zA-Z0-9_]+";
-
-    string toD(const string value) @safe
-    {
-        return value;
-    }
 }
 
 struct UUIDConverter
@@ -109,20 +104,17 @@ BoundPathConverter bindPathConverter(alias pathConverter, string converterPathNa
     return BoundPathConverter(moduleName!pathConverter, __traits(identifier, pathConverter), converterPathName);
 }
 
-template pathConverterMap(BoundPathConverter[] boundPathConverters)
+PathConverterRef[string] pathConverterMap(BoundPathConverter[] boundPathConverters)() @trusted
 {
-    PathConverterRef[string] pathConverterMap() @safe
+    mixin("PathConverterRef[string] converters;");
+
+    static foreach_reverse (boundPathConverter; boundPathConverters)
     {
-        mixin("PathConverterRef[string] converters;");
-
-        static foreach_reverse (boundPathConverter; boundPathConverters)
-        {
-            mixin("import " ~ boundPathConverter.moduleName ~ " : " ~ boundPathConverter.objectName ~ ";");
-            mixin("converters[\"" ~ boundPathConverter.converterPathName ~ "\"] = PathConverterRef(cast(void*) new " ~ boundPathConverter.objectName ~ ");");
-        }
-
-        return mixin("converters");
+        mixin("import " ~ boundPathConverter.moduleName ~ " : " ~ boundPathConverter.objectName ~ ";");
+        mixin("converters[\"" ~ boundPathConverter.converterPathName ~ "\"] = PathConverterRef(cast(void*) new " ~ boundPathConverter.objectName ~ ");");
     }
+
+    return mixin("converters");
 }
 
 template TypedURLRouter(BoundPathConverter[] userPathConverters = [])
