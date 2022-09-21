@@ -265,14 +265,19 @@ Path:
             enum parsedPath = parsePath!(path, true);
 
             HandlerDelegate handlerDelegate = (req, res, pathCaptureGroups) @trusted {
-                auto tailArgs = tuple!(Parameters!(handler)[2..$]);
-
-                static foreach (i; 0 .. tailArgs.length)
+                static if (Parameters!(handler).length == 2)
+                    handler(req, res);
+                else
                 {
-                    tailArgs[i] = (cast(mixin(getBoundPathConverter!(parsedPath.pathCaptureGroups[i].converterPathName).objectName ~ "*")) pathConverters[pathCaptureGroups[i].converterPathName].ptr).toD(req.params.get(pathCaptureGroups[i].pathParameter));
-                }
+                    auto tailArgs = tuple!(Parameters!(handler)[2..$]);
 
-                handler(req, res, tailArgs.expand);
+                    static foreach (i; 0 .. tailArgs.length)
+                    {
+                        tailArgs[i] = (cast(mixin(getBoundPathConverter!(parsedPath.pathCaptureGroups[i].converterPathName).objectName ~ "*")) pathConverters[pathCaptureGroups[i].converterPathName].ptr).toD(req.params.get(pathCaptureGroups[i].pathParameter));
+                    }
+
+                    handler(req, res, tailArgs.expand);
+                }
             };
 
             auto methodPresent = method in routes;
