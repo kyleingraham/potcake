@@ -3,7 +3,6 @@ import std.regex : Regex;
 import vibe.core.core : runApplication;
 import vibe.core.log : logDebug, LogLevel, setLogLevel;
 import vibe.http.common : HTTPMethod;
-import vibe.http.router : URLRouter;
 import vibe.http.server : HTTPServerRequest, HTTPServerRequestHandler, HTTPServerResponse, HTTPServerSettings, listenHTTP;
 import vibe.http.status : HTTPStatus;
 
