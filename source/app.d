@@ -1,6 +1,7 @@
 import pegged.peg : ParseTree;
 import std.regex : Regex;
 import vibe.core.core : runApplication;
+import vibe.core.log : logDebug, LogLevel, setLogLevel;
 import vibe.http.common : HTTPMethod;
 import vibe.http.router : URLRouter;
 import vibe.http.server : HTTPServerRequest, HTTPServerRequestHandler, HTTPServerResponse, HTTPServerSettings, listenHTTP;
@@ -238,7 +239,7 @@ Path:
                 auto matches = matchAll(req.path, route.pathRegex);
 
                 if (matches.empty())
-                    continue;
+                    continue ;
 
                 foreach (i; 0 .. route.pathRegex.namedCaptures.length)
                 {
@@ -258,6 +259,7 @@ Path:
 
         TypedURLRouter setHandler(string path, Handler)(HTTPMethod method, Handler handler)
         {
+            import std.conv : to;
             import std.regex : regex;
             import std.traits : Parameters;
             import std.typecons : tuple;
@@ -285,8 +287,10 @@ Path:
             if (methodPresent is null)
                 routes[method] = [];
 
-            routes[method] = routes[method] ~ Route(regex(parsedPath.regexPath, "s"), handlerDelegate, parsedPath.pathCaptureGroups); // Single-line mode works hand-in-hand with $ to exclude trailing slashes when matching.
-            // TODO: Add debug logging of routes registered
+            auto route = Route(regex(parsedPath.regexPath, "s"), handlerDelegate, parsedPath.pathCaptureGroups);
+            routes[method] = routes[method] ~ route; // Single-line mode works hand-in-hand with $ to exclude trailing slashes when matching.
+
+            logDebug("Added %s route: %s", to!string(method), route);
 
             return this;
         }
@@ -311,6 +315,8 @@ void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int a
 
 int main()
 {
+    setLogLevel(LogLevel.debug_);
+
     auto router = new TypedURLRouter!();
     router.get!"/hello/<name>/<int:age>/"(&helloUser);
 
