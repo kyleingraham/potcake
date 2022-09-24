@@ -266,6 +266,7 @@ Path:
         TypedURLRouter setHandler(string path, Handler)(HTTPMethod method, Handler handler)
         {
             import std.conv : to;
+            import std.range.primitives : back;
             import std.regex : regex;
             import std.traits : Parameters;
             import std.typecons : tuple;
@@ -293,10 +294,9 @@ Path:
             if (methodPresent is null)
                 routes[method] = [];
 
-            auto route = Route(regex(parsedPath.regexPath, "s"), handlerDelegate, parsedPath.pathCaptureGroups);
-            routes[method] = routes[method] ~ route; // Single-line mode works hand-in-hand with $ to exclude trailing slashes when matching.
+            routes[method] ~= Route(regex(parsedPath.regexPath, "s"), handlerDelegate, parsedPath.pathCaptureGroups); // Single-line mode works hand-in-hand with $ to exclude trailing slashes when matching.
 
-            logDebug("Added %s route: %s", to!string(method), route);
+            logDebug("Added %s route: %s", to!string(method), routes[method].back);
 
             return this;
         }
