@@ -26,19 +26,26 @@ struct IntConverter
     }
 }
 
-class StringConverter
+mixin template StringToD()
 {
-    enum regex = "[^/]+";
-
     string toD(const string value) @safe
     {
         return value;
     }
 }
 
-class SlugConverter : StringConverter
+struct StringConverter
+{
+    enum regex = "[^/]+";
+
+    mixin StringToD;
+}
+
+struct SlugConverter
 {
     enum regex = "[-a-zA-Z0-9_]+";
+
+    mixin StringToD;
 }
 
 struct UUIDConverter
