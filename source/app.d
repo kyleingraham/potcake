@@ -124,6 +124,16 @@ PathConverterRef[string] pathConverterMap(BoundPathConverter[] boundPathConverte
     return mixin("converters");
 }
 
+private struct TestStringConverter
+{
+    enum regex = "[^/]+";
+
+    string toD(const string value) @safe
+    {
+        return "PASS";
+    }
+}
+
 template TypedURLRouter(BoundPathConverter[] userPathConverters = [])
 {
     import std.array : join;
@@ -232,8 +242,24 @@ Path:
 
         this()
         {
-            // TODO: Test we prioritize user converters
             pathConverters = pathConverterMap!boundPathConverters;
+        }
+
+        unittest
+        {
+            import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+            import vibe.inet.url : URL;
+
+            void testHandler(HTTPServerRequest req, HTTPServerResponse res, string name)
+            {
+                assert(name == "PASS", "Used built-in 'string' path converter instead of user-supplied converter");
+            }
+
+            auto r = new TypedURLRouter!([bindPathConverter!(TestStringConverter, "string")]);
+            r.get!"/hello/<string:name>/"(&testHandler);
+
+            auto res = createTestHTTPServerResponse();
+            r.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/FAIL/")), res);
         }
 
         void handleRequest(HTTPServerRequest req, HTTPServerResponse res)
