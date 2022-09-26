@@ -266,6 +266,7 @@ Path:
         TypedURLRouter setHandler(string path, Handler)(HTTPMethod method, Handler handler)
         {
             import std.conv : to;
+            import std.format : format;
             import std.range.primitives : back;
             import std.regex : regex;
             import std.traits : Parameters;
@@ -278,6 +279,10 @@ Path:
                     handler(req, res);
                 else
                 {
+                    enum nonReqResParamCount = Parameters!(handler).length - 2;
+
+                    static assert(parsedPath.pathCaptureGroups.length == nonReqResParamCount, format("Path (%s) handler's non-request/response parameter count (%s) does not match path parameter count (%s)", path, parsedPath.pathCaptureGroups.length, nonReqResParamCount));
+
                     auto tailArgs = tuple!(Parameters!(handler)[2..$]);
 
                     static foreach (i; 0 .. tailArgs.length)
