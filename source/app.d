@@ -124,16 +124,6 @@ PathConverterRef[string] pathConverterMap(BoundPathConverter[] boundPathConverte
     return mixin("converters");
 }
 
-private struct TestStringConverter
-{
-    enum regex = "[^/]+";
-
-    string toD(const string value) @safe
-    {
-        return "PASS";
-    }
-}
-
 template TypedURLRouter(BoundPathConverter[] userPathConverters = [])
 {
     import std.array : join;
@@ -237,8 +227,10 @@ Path:
 
     final class TypedURLRouter : HTTPServerRequestHandler
     {
-        Route[][HTTPMethod] routes;
-        PathConverterRef[string] pathConverters;
+        private {
+            Route[][HTTPMethod] routes;
+            PathConverterRef[string] pathConverters;
+        }
 
         this()
         {
@@ -247,19 +239,24 @@ Path:
 
         unittest
         {
-            import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
-            import vibe.inet.url : URL;
-
-            void testHandler(HTTPServerRequest req, HTTPServerResponse res, string name)
+            void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int age) @safe
             {
-                assert(name == "PASS", "Used built-in 'string' path converter instead of user-supplied converter");
+                import std.conv : to;
+
+                res.contentType = "text/html; charset=UTF-8";
+                res.writeBody(`
+<!DOCTYPE html>
+<html lang="en">
+    <head></head>
+    <body>
+        Hello, ` ~ name ~ `. You are ` ~ to!string(age) ~ ` years old.
+    </body>
+</html>`,
+                HTTPStatus.ok);
             }
 
-            auto r = new TypedURLRouter!([bindPathConverter!(TestStringConverter, "string")]);
-            r.get!"/hello/<string:name>/"(&testHandler);
-
-            auto res = createTestHTTPServerResponse();
-            r.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/FAIL/")), res);
+            auto router = new TypedURLRouter!();
+            router.get!"/hello/<name>/<int:age>/"(&helloUser);
         }
 
         void handleRequest(HTTPServerRequest req, HTTPServerResponse res)
@@ -334,36 +331,138 @@ Path:
     }
 }
 
-void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int age) @safe
+private struct TestStringConverter
 {
-    import std.conv : to;
+    enum regex = "[^/]+";
 
-    res.contentType = "text/html; charset=UTF-8";
-    res.writeBody(`
-<!DOCTYPE html>
-<html lang="en">
-    <head></head>
-    <body>
-        Hello, ` ~ name ~ `. You are ` ~ to!string(age) ~ ` months old.
-    </body>
-</html>`,
-    HTTPStatus.ok);
+    string toD(const string value) @safe
+    {
+        return "PASS";
+    }
 }
+
+unittest
+{
+    // Do we prioritize user path converters that override built-ins?
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    void testHandler(HTTPServerRequest req, HTTPServerResponse res, string name)
+    {
+        assert(name == "PASS", "Used built-in 'string' path converter instead of user-supplied converter");
+    }
+
+    auto router = new TypedURLRouter!([bindPathConverter!(TestStringConverter, "string")]);
+    router.get!"/hello/<string:name>/"(&testHandler);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/FAIL/")), res);
+}
+
+unittest
+{
+    // Do we match against URLs with:
+    //  - multiple path converters
+    //  - one path converter
+    //  - no path converters
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "A";
+    }
+    void b(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "B";
+    }
+    void c(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "C";
+    }
+    void d(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "D";
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/make/<string:model>/model/<int:make>/"(&a);
+    router.get!"/<int:value>/"(&b);
+    router.get!"/<int:value>"(&c);
+    router.get!"/no/path/converters/"(&d);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/")), res);
+    assert(result == "", "Matched for non-existent '/' path");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/make/porsche/model/911/")), res);
+    assert(result == "A", "Did not match GET with multiple path converter types");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/make/porsche/model/taycan/")), res);
+    assert(result == "A", "Did not block GET match on 'int' type");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1/")), res);
+    assert(result == "AB", "Did not match trailing '/'");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1")), res);
+    assert(result == "ABC", "Did not match without trailing '/'");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/no/path/converters/")), res);
+    assert(result == "ABCD", "Did not match when no path converters present");
+}
+
+unittest
+{
+    // Do we set 'string' as the default path converter when non is specified?
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "A";
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/make/<string:model>/model/<make>/"(&a);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/make/porsche/model/911/")), res);
+    assert(result == "A", "Did not set path converter to 'string' when no type specified");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/make/porsche/model/taycan/")), res);
+    assert(result == "AA", "Did not match against string using default 'string' converter");
+}
+
+unittest
+{
+    // Do we save path values to request.params and convert them for use when calling handlers?
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        assert(req.params["id"] == "123456", "Did not save path value to request params");
+    }
+
+    void b(HTTPServerRequest req, HTTPServerResponse res, int id)
+    {
+        assert(req.params["id"] == "123456", "Did not save path value to request params");
+        assert(id == 123456, "Did pass path value to handler");
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/a/<int:id>/"(&a);
+    router.get!"/b/<int:id>/"(&b);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/a/123456/")), res);
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/b/123456/")), res);
+}
+
+// TODO: Convert package to library
+// TODO: Add test for valid handler
+// TODO: Test built-in path converters
+// TODO: Minimize vibe-d packages used
 
 int main()
 {
-    setLogLevel(LogLevel.debug_);
-
-    auto router = new TypedURLRouter!();
-    router.get!"/hello/<name>/<int:age>/"(&helloUser);
-
-    auto settings = new HTTPServerSettings;
-    settings.bindAddresses = ["127.0.0.1"];
-    settings.port = 9000;
-
-    auto listener = listenHTTP(settings, router);
-    scope (exit)
-    listener.stopListening();
-
-    return runApplication();
+    return 1;
 }
