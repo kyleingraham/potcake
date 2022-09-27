@@ -64,10 +64,7 @@ struct URLPathConverter
 {
     enum regex = ".+";
 
-    string toD(const string value) @safe
-    {
-        return value;
-    }
+    mixin StringToD;
 }
 
 struct PathCaptureGroup
@@ -278,15 +275,16 @@ Path:
                 // TODO: We need to allow for more than one handler to check the request. Check for res.headerWritten.
                 // Middleware is the answer. After route is matched we can then call all middleware.
                 route.handler(req, res, route.pathCaptureGroups);
+                break ;
             }
         }
 
         TypedURLRouter get(string path, Handler)(Handler handler)
         {
-            return setHandler!path(HTTPMethod.GET, handler);
+            return match!path(HTTPMethod.GET, handler);
         }
 
-        TypedURLRouter setHandler(string path, Handler)(HTTPMethod method, Handler handler)
+        TypedURLRouter match(string path, Handler)(HTTPMethod method, Handler handler)
         {
             import std.conv : to;
             import std.format : format;
@@ -457,9 +455,139 @@ unittest
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/b/123456/")), res);
 }
 
+unittest
+{
+    // IntConverter
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res, int value)
+    {
+        result ~= "A";
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/<int:value>/"(&a);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1/")), res);
+    assert(result == "A", "Did not match 'int' path converter");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/one/")), res);
+    assert(result == "A", "Matched with non-integer value");
+}
+
+unittest
+{
+    // SlugConverter
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res, string slug)
+    {
+        result ~= "A";
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/<slug:value>/"(&a);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/slug-string/")), res);
+    assert(result == "A", "Did not match 'slug' path converter");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/non~slug~string/")), res);
+    assert(result == "A", "Matched with non-slug value");
+}
+
+unittest
+{
+    // UUIDConverter
+    import std.uuid : UUID;
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res, UUID value)
+    {
+        result ~= "A";
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/<uuid:value>/"(&a);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1234abcd-1234-abcd-1234-abcd1234abcd/")), res);
+    assert(result == "A", "Did not match 'uuid' path converter");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1234ABCD-1234-ABCD-1234-ABCD1234ABCD/")), res);
+    assert(result == "A", "Matched with non-uuid value");
+}
+
+unittest
+{
+    // StringConverter & URLPathConverter
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res, string value)
+    {
+        result ~= "B";
+    }
+
+    void b(HTTPServerRequest req, HTTPServerResponse res, string value)
+    {
+        import std.format : format;
+
+        string expectedValue = "some/valid/path";
+        assert(value == expectedValue, format("Path not parsed correctly. Expected '%s' but got '%s'.", expectedValue, value));
+        result ~= "A";
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/<string:value>/"(&a);
+    router.get!"/<path:value>/"(&b);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/some/valid/path/")), res);
+    assert(result == "A", "Did not match 'path' path converter");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/some-valid-path/")), res);
+    assert(result == "AB", "Did not match with 'string' path converter");
+}
+
+unittest
+{
+    // Do we stop calling handlers after calling the first-matched handler?
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "A";
+    }
+
+    void b(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "B";
+    }
+
+
+    auto router = new TypedURLRouter!();
+    router.get!"/<string:value>/"(&a);
+    router.get!"/<string:value>/"(&b);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/value/")), res);
+    assert(result == "A", "Called additional handler after first-matched handler");
+}
+
 // TODO: Convert package to library
 // TODO: Add test for valid handler
-// TODO: Test built-in path converters
 // TODO: Minimize vibe-d packages used
 
 int main()
