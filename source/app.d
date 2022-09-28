@@ -272,19 +272,19 @@ Path:
                     req.params[route.pathRegex.namedCaptures[i]] = matches.captures[route.pathRegex.namedCaptures[i]];
                 }
 
-                // TODO: We need to allow for more than one handler to check the request. Check for res.headerWritten.
-                // Middleware is the answer. After route is matched we can then call all middleware.
                 route.handler(req, res, route.pathCaptureGroups);
                 break ;
             }
         }
 
         TypedURLRouter get(string path, Handler)(Handler handler)
+        if (isValidHandler!Handler)
         {
             return match!path(HTTPMethod.GET, handler);
         }
 
         TypedURLRouter match(string path, Handler)(HTTPMethod method, Handler handler)
+        if (isValidHandler!Handler)
         {
             import std.conv : to;
             import std.format : format;
@@ -325,6 +325,51 @@ Path:
             logDebug("Added %s route: %s", to!string(method), routes[method].back);
 
             return this;
+        }
+
+        template isValidHandler(Handler)
+        {
+            import std.traits : Parameters, ReturnType;
+
+            static if (
+                2 <= Parameters!(Handler).length &&
+                is(Parameters!(Handler)[0] : HTTPServerRequest) &&
+                is(Parameters!(Handler)[1] : HTTPServerResponse) &&
+                is(ReturnType!Handler : void)
+            )
+            {
+                enum isValidHandler = true;
+            }
+            else
+            {
+                enum isValidHandler = false;
+            }
+        }
+
+        unittest
+        {
+            // Do we block invalid handlers?
+            void handler(HTTPServerRequest req, HTTPServerResponse res) {}
+
+            class HandlerClass
+            {
+                void handler(HTTPServerRequest req, HTTPServerResponse res) {}
+            }
+
+            void typedHandler(HTTPServerRequest req, HTTPServerResponse res, int value) {}
+
+            void test(Handler)(Handler handler)
+            {
+                static assert(isValidHandler!Handler);
+            }
+
+            test(&handler);
+            test(&(HandlerClass.handler));
+            test(&typedHandler);
+            static assert(!isValidHandler!(void function(int value)));
+            static assert(!isValidHandler!(void function(HTTPServerRequest req)));
+            static assert(!isValidHandler!(void function(HTTPServerResponse res)));
+            static assert(!isValidHandler!(int function(HTTPServerResponse res, HTTPServerResponse res)));
         }
     }
 }
@@ -587,8 +632,9 @@ unittest
 }
 
 // TODO: Convert package to library
-// TODO: Add test for valid handler
 // TODO: Minimize vibe-d packages used
+// TODO: Add README
+// TODO: Add license
 
 int main()
 {
