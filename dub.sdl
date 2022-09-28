@@ -5,5 +5,8 @@ copyright "Copyright © 2022, Kyle Ingraham"
 license "proprietary"
 
 dependency "pegged" version="~>0.4.6"
-dependency "vibe-d" version="~>0.9.5"
-lflags "-L/opt/local/lib/openssl-1.1" platform="osx"
+dependency "vibe-core" version="~>1.22.4"
+dependency "vibe-d:http" version="~>0.9.5"
+dependency "vibe-d:inet" version="~>0.9.5"
+
+lflags "-L/opt/local/lib/openssl-1.1" platform="osx" // Location used by MacPorts for openssl11

@@ -632,7 +632,6 @@ unittest
 }
 
 // TODO: Convert package to library
-// TODO: Minimize vibe-d packages used
 // TODO: Add README
 // TODO: Add license
 
