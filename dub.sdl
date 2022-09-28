@@ -1,5 +1,5 @@
 name "typed-router"
-description "A minimal D application."
+description "vibe.d router that routes on path parameter types."
 authors "Kyle Ingraham"
 copyright "Copyright © 2022, Kyle Ingraham"
 license "proprietary"
