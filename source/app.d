@@ -633,7 +633,6 @@ unittest
 
 // TODO: Convert package to library
 // TODO: Add README
-// TODO: Add license
 
 int main()
 {
