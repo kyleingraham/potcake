@@ -1,4 +1,4 @@
-name "typed-router"
+name "typed_router"
 description "vibe.d router that routes on path parameter types."
 authors "Kyle Ingraham"
 copyright "Copyright © 2022, Kyle Ingraham"

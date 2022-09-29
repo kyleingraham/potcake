@@ -1,3 +1,5 @@
+module typed_router.router;
+
 import pegged.peg : ParseTree;
 import std.regex : Regex;
 import vibe.core.core : runApplication;
@@ -631,10 +633,4 @@ unittest
     assert(result == "A", "Called additional handler after first-matched handler");
 }
 
-// TODO: Convert package to library
 // TODO: Add README
-
-int main()
-{
-    return 1;
-}
