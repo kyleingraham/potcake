@@ -632,5 +632,3 @@ unittest
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/value/")), res);
     assert(result == "A", "Called additional handler after first-matched handler");
 }
-
-// TODO: Add README
