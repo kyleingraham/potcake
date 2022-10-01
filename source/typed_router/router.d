@@ -2,10 +2,9 @@ module typed_router.router;
 
 import pegged.peg : ParseTree;
 import std.regex : Regex;
-import vibe.core.core : runApplication;
-import vibe.core.log : logDebug, LogLevel, setLogLevel;
+import vibe.core.log : logDebug;
 import vibe.http.common : HTTPMethod;
-import vibe.http.server : HTTPServerRequest, HTTPServerRequestHandler, HTTPServerResponse, HTTPServerSettings, listenHTTP;
+import vibe.http.server : HTTPServerRequest, HTTPServerRequestHandler, HTTPServerResponse;
 import vibe.http.status : HTTPStatus;
 
 class ImproperlyConfigured : Exception

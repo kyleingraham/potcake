@@ -1,7 +1,6 @@
 module typed_router.tests;
 
 import typed_router.router : bindPathConverter, isValidHandler, TypedURLRouter;
-
 import vibe.http.server : HTTPServerRequest, HTTPServerResponse;
 
 // This converter must be placed in a module separate to TypedURLConverter to ensure no regression in being able to use
