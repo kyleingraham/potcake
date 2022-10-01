@@ -1,5 +1,5 @@
 # typed-router
-An vibe.d router that implements [Django's](https://www.djangoproject.com/) URL dispatching system.
+A [vibe.d](https://vibed.org/) router that implements [Django's](https://www.djangoproject.com/) URL dispatching system.
 
 ```d
 import typed_router : TypedURLRouter;
@@ -45,13 +45,13 @@ void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int a
 typed-router uses D's flexibility to implement key components of Django's URL dispatching system. The end result is a 
 blending of the ergonomics available in Django with the, to me, superior development experience of D.
 
-Key components of Django's [URL dispatching system are](https://docs.djangoproject.com/en/dev/topics/http/urls/#url-dispatcher):
+Key components of Django's [URL dispatching system](https://docs.djangoproject.com/en/dev/topics/http/urls/#url-dispatcher) are:
 - The URL path expression scheme
 - The ability to extend the path expression scheme through path converters
 
 ### URL Path Expression Scheme
 Django allows the developer to [specify values to be captured](https://docs.djangoproject.com/en/dev/topics/http/urls/#example). 
-This is similar to functionality available in most web frameworks. Identifiers in angle brackets will be used to extract 
+This is similar to functionality available in most web frameworks (including vibe.d). Identifiers in angle brackets will be used to extract 
 values from matched paths. Those values are then made available to handlers as strings. After matching the following 
 example path on structure, Django would make `name` and `age` string values available to the path's associated handler:
 
@@ -72,7 +72,7 @@ an example:
 
 `name` has no path converter and so would be matched as a string. `age` on the other hand has the `int` path converter
 which matches against integers and passes an integer value to the path's handler. A request to `/hello/ash/12/` would
-match against this path while a request to `/hello/ash/twelve` would not.
+match against this path while a request to `/hello/ash/twelve/` would not.
 
 Behind the scenes, path converters are objects that:
 - Hold a regex pattern for values they match against
@@ -119,11 +119,11 @@ void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int a
 
 #### Handlers
 Handlers given to `TypedURLRouter` (like with `URLRouter`) should at the very least return `void` and accept an 
-`HTTPServerRequest` and an `HTTPServerResponse`. Values extracted from the requests path are saved to 
+`HTTPServerRequest` and an `HTTPServerResponse`. Values extracted from the request's path are saved to 
 `HTTPServerRequest.params` as strings.
 
-If the parameter signature for a handler is extended with the types return by its path's path converters then 
-`TypedURLRouter` will additionally use the path converter `toD` functions to pass converted values to the handler.
+If the parameter signature for a handler is extended with the types returned by its path's path converters then 
+`TypedURLRouter` will additionally use the path converters' `toD` functions to pass converted values to the handler.
 
 
 ## Roadmap
