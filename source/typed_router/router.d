@@ -240,6 +240,7 @@ Path:
             pathConverters = pathConverterMap!boundPathConverters;
         }
 
+        ///
         unittest
         {
             void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int age) @safe
@@ -258,8 +259,21 @@ Path:
                 HTTPStatus.ok);
             }
 
+            HTTPServerRequestDelegate middleware(HTTPServerRequestDelegate next)
+            {
+                void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+                {
+                    // Do something before routing...
+                    next(req, res);
+                    // Do something after routing...
+                }
+
+                return &middlewareDelegate;
+            }
+
             auto router = new TypedURLRouter!();
             router.get!"/hello/<name>/<int:age>/"(&helloUser);
+            router.addMiddleware(&middleware);
         }
 
         void addMiddleware(MiddlewareDelegate middleware)
