@@ -150,8 +150,15 @@ If the parameter signature for a handler is extended with the types returned by 
 
 
 ## Roadmap
-- Middleware (there is currently no way to specify handlers to be called for every path)
+- Middleware
+    - [x] Middleware system
+    - Convenience middleware
+        - [ ] Static files
+        - [ ] CORS
+    - [ ] Post-routing middleware
+    - [ ] Health-check endpoint middleware
+    - [ ] Class-based middleware
 - Matching the API for vibe.d's `URLRouter`
-    - Set of valid handler signatures
-    - Handler registration functions e.g. `post`
-    - Per-router path prefixes
+    - [ ] Set of valid handler signatures
+    - [ ] Handler registration functions e.g. `post`
+    - [ ] Per-router path prefixes
