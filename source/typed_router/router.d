@@ -4,7 +4,7 @@ import pegged.peg : ParseTree;
 import std.regex : Regex;
 import vibe.core.log : logDebug;
 import vibe.http.common : HTTPMethod;
-import vibe.http.server : HTTPServerRequest, HTTPServerRequestHandler, HTTPServerResponse;
+import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerRequestHandler, HTTPServerResponse;
 import vibe.http.status : HTTPStatus;
 
 class ImproperlyConfigured : Exception
@@ -82,6 +82,8 @@ struct ParsedPath
 }
 
 alias HandlerDelegate = void delegate(HTTPServerRequest req, HTTPServerResponse res, PathCaptureGroup[] pathCaptureGroups) @safe;
+
+alias MiddlewareDelegate = HTTPServerRequestDelegate delegate(HTTPServerRequestDelegate next) @safe;
 
 struct Route
 {
@@ -228,6 +230,9 @@ Path:
         private {
             Route[][HTTPMethod] routes;
             PathConverterRef[string] pathConverters;
+            MiddlewareDelegate[] middleware;
+            bool handlerNeedsUpdate = true;
+            HTTPServerRequestDelegate handler;
         }
 
         this()
@@ -235,6 +240,7 @@ Path:
             pathConverters = pathConverterMap!boundPathConverters;
         }
 
+        ///
         unittest
         {
             void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int age) @safe
@@ -253,11 +259,49 @@ Path:
                 HTTPStatus.ok);
             }
 
+            HTTPServerRequestDelegate middleware(HTTPServerRequestDelegate next)
+            {
+                void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+                {
+                    // Do something before routing...
+                    next(req, res);
+                    // Do something after routing...
+                }
+
+                return &middlewareDelegate;
+            }
+
             auto router = new TypedURLRouter!();
             router.get!"/hello/<name>/<int:age>/"(&helloUser);
+            router.addMiddleware(&middleware);
+        }
+
+        void addMiddleware(MiddlewareDelegate middleware)
+        {
+            this.middleware ~= middleware;
+            handlerNeedsUpdate = true;
         }
 
         void handleRequest(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            if (handlerNeedsUpdate)
+            {
+                updateHandler();
+                handlerNeedsUpdate = false;
+            }
+
+            handler(req, res);
+        }
+
+        void updateHandler()
+        {
+            handler = &routeRequest;
+
+            foreach_reverse (ref mw; middleware)
+                handler = mw(handler);
+        }
+
+        void routeRequest(HTTPServerRequest req, HTTPServerResponse res)
         {
             import std.regex : matchAll;
 
@@ -269,9 +313,7 @@ Path:
                     continue ;
 
                 foreach (i; 0 .. route.pathRegex.namedCaptures.length)
-                {
                     req.params[route.pathRegex.namedCaptures[i]] = matches.captures[route.pathRegex.namedCaptures[i]];
-                }
 
                 route.handler(req, res, route.pathCaptureGroups);
                 break ;

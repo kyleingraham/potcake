@@ -1,7 +1,7 @@
 module typed_router.tests;
 
 import typed_router.router : bindPathConverter, isValidHandler, TypedURLRouter;
-import vibe.http.server : HTTPServerRequest, HTTPServerResponse;
+import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
 
 // This converter must be placed in a module separate to TypedURLConverter to ensure no regression in being able to use
 // converters defined outside of the router's.
@@ -286,4 +286,97 @@ unittest
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/value/")), res);
     assert(result == "A", "Called additional handler after first-matched handler");
+}
+
+unittest
+{
+    // Do we call middleware in the right order then the routes handler?
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    HTTPServerRequestDelegate middlewareA(HTTPServerRequestDelegate next)
+    {
+        void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            result ~= "A";
+            next(req, res);
+            result ~= "E";
+        }
+
+        return &middlewareDelegate;
+    }
+
+    HTTPServerRequestDelegate middlewareB(HTTPServerRequestDelegate next)
+    {
+        void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            result ~= "B";
+            next(req, res);
+            result ~= "D";
+        }
+
+        return &middlewareDelegate;
+    }
+
+    void handlerA(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "C";
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/hello/"(&handlerA);
+    router.addMiddleware(&middlewareA);
+    router.addMiddleware(&middlewareB);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/")), res);
+    assert(result == "ABCDE", "Did not call middleware ordered by first added to last then handler");
+}
+
+unittest
+{
+    // Do we bypass downstream middleware and routing when a middleware short-circuits?
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    HTTPServerRequestDelegate middlewareA(HTTPServerRequestDelegate next)
+    {
+        void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            result ~= "A";
+            next(req, res);
+            result ~= "D";
+        }
+
+        return &middlewareDelegate;
+    }
+
+    HTTPServerRequestDelegate middlewareB(HTTPServerRequestDelegate next)
+    {
+        void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            result ~= "B";
+            result ~= "C";
+        }
+
+        return &middlewareDelegate;
+    }
+
+    void handlerA(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "X";
+    }
+
+    auto router = new TypedURLRouter!();
+    router.get!"/hello/"(&handlerA);
+    router.addMiddleware(&middlewareA);
+    router.addMiddleware(&middlewareB);
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/")), res);
+    assert(result == "ABCD", "Did not short-circuit path through middleware to handler");
 }
