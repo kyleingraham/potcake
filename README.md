@@ -2,15 +2,15 @@
 A [vibe.d](https://vibed.org/) router that implements [Django's](https://www.djangoproject.com/) URL dispatching system.
 
 ```d
-import typed_router : TypedURLRouter;
+import potcake;
 
-import vibe.core.core;
-import vibe.http.server;
-import vibe.http.status;
+import vibe.core.core : runApplication;
+import vibe.http.server : HTTPServerSettings, listenHTTP;
+import vibe.http.status : HTTPStatus;
 
 int main()
 {
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/hello/<name>/<int:age>/"(&helloUser);
 
     auto settings = new HTTPServerSettings;
@@ -90,11 +90,11 @@ converters must first be defined as structs with the following properties:
 #### User-defined Path Converter Example
 
 ```d
-import typed_router : bindPathConverter, TypedURLRouter;
+import potcake;
 
-import vibe.core.core;
-import vibe.http.server;
-import vibe.http.status;
+import vibe.core.core : runApplication;
+import vibe.http.server : HTTPServerSettings, listenHTTP;
+import vibe.http.status : HTTPStatus;
 
 struct NoNinesIntConverter
 {
@@ -110,7 +110,7 @@ struct NoNinesIntConverter
 
 int main()
 {
-    auto router = new TypedURLRouter!([bindPathConverter!(NoNinesIntConverter, "nonines")]);
+    auto router = new Router!([bindPathConverter!(NoNinesIntConverter, "nonines")]);
     router.get!"/hello/<name>/<nonines:age>/"(&helloUser);
 
     auto settings = new HTTPServerSettings;

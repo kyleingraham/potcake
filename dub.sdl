@@ -1,13 +1,31 @@
-name "typed_router"
-description "vibe.d router that routes on path parameter types."
+name "potcake"
+description "An easy to live with, sensible, and dependable web framework."
 authors "Kyle Ingraham"
 copyright "Copyright © 2022, Kyle Ingraham"
 license "MIT"
 
-dependency "pegged" version="~>0.4.6"
-dependency "vibe-core" version="~>1.22.4"
-dependency "vibe-d:http" version="~>0.9.5"
-dependency "vibe-d:inet" version="~>0.9.5"
+dependency "potcake:http" version="*"
 
-lflags "-L/opt/local/lib/openssl-3" platform="osx" // Location used by MacPorts for openssl3
-lflags "-L/opt/local/lib/openssl-1.1" platform="osx" // Location used by MacPorts for openssl11
+targetType "library"
+targetName "potcake"
+
+sourcePaths "."
+importPaths "."
+
+subPackage {
+    name "http"
+    description "Potcake web framework lower-level http components. Includes its vibe.d router."
+
+    dependency "pegged" version="~>0.4.6"
+    dependency "vibe-core" version="~>1.22.4"
+    dependency "vibe-d:http" version="~>0.9.5"
+    dependency "vibe-d:inet" version="~>0.9.5"
+
+    targetType "library"
+
+    sourcePaths "http"
+    importPaths "http"
+
+    lflags "-L/opt/local/lib/openssl-3" platform="osx" // Location used by MacPorts for openssl3
+    lflags "-L/opt/local/lib/openssl-1.1" platform="osx" // Location used by MacPorts for openssl11
+}
