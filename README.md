@@ -1,5 +1,9 @@
-# typed-router
-A [vibe.d](https://vibed.org/) router that implements [Django's](https://www.djangoproject.com/) URL dispatching system.
+# Potcake
+An easy to live with, sensible, and dependable web framework built on [vibe.d](https://vibed.org/).
+
+
+## URL Dispatching
+Potcake implements [Django's](https://www.djangoproject.com/) URL dispatching system.
 
 ```d
 import potcake;
@@ -41,15 +45,15 @@ void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int a
 }
 ```
 
-## Details
-typed-router uses D's flexibility to implement key components of Django's URL dispatching system. The end result is a
+### Details
+Potcake uses D's flexibility to implement key components of Django's URL dispatching system. The end result is a
 blending of the ergonomics available in Django with the, to me, superior development experience of D.
 
 Key components of Django's [URL dispatching system](https://docs.djangoproject.com/en/dev/topics/http/urls/#url-dispatcher) are:
 - The URL path expression scheme
 - The ability to extend the path expression scheme through path converters
 
-### URL Path Expression Scheme
+#### URL Path Expression Scheme
 Django allows the developer to [specify values to be captured](https://docs.djangoproject.com/en/dev/topics/http/urls/#example).
 This is similar to functionality available in most web frameworks (including vibe.d). Identifiers in angle brackets will be used to extract
 values from matched paths. Those values are then made available to handlers as strings. After matching the following
@@ -61,7 +65,7 @@ example path on structure, Django would make `name` and `age` string values avai
 
 Where things get interesting is Django's URL path expression scheme's path converters.
 
-### Path Converters
+#### Path Converters
 Captured value specifications can optionally include a path converter. Path converters influence both how their portion
 of the path is matched when routing, and the type of value passed to an associated handler. Take the following path as
 an example:
@@ -78,8 +82,8 @@ Behind the scenes, path converters are objects that:
 - Hold a regex pattern for values they match against
 - Understand how to convert string values to the path converter's return type
 
-### TypedURLRouter
-typed-router provides `TypedURLRouter` which is a vibe.d router that understands Django's URL path expression scheme.
+#### potcake.http.router.Router
+Potcake provides `Router` which is a vibe.d router that understands Django's URL path expression scheme.
 Paths are parsed at compile-time using built-in or user-provided path converters. Built-in path converters match
 [Django's built-in set](https://docs.djangoproject.com/en/dev/topics/http/urls/#path-converters). User-specified path
 converters must first be defined as structs with the following properties:
@@ -87,7 +91,7 @@ converters must first be defined as structs with the following properties:
 - An `enum` member named `regex` with a regex character class representing strings to match against within a requested path.
 - A `@safe` `toD` function that accepts a `const string`. The return type can be any desired outside `void`. This function converts strings to the type produced by the path converter.
 
-#### User-defined Path Converter Example
+##### User-defined Path Converter Example
 
 ```d
 import potcake;
@@ -140,13 +144,20 @@ void helloUser(HTTPServerRequest req, HTTPServerResponse res, string name, int a
 }
 ```
 
-#### Handlers
-Handlers given to `TypedURLRouter` (like with `URLRouter`) should at the very least return `void` and accept an
+##### Handlers
+Handlers given to `Router` (like with `URLRouter`) should at the very least return `void` and accept an
 `HTTPServerRequest` and an `HTTPServerResponse`. Values extracted from the request's path are saved to
 `HTTPServerRequest.params` as strings.
 
 If the parameter signature for a handler is extended with the types returned by its path's path converters then
-`TypedURLRouter` will additionally use the path converters' `toD` functions to pass converted values to the handler.
+`Router` will additionally use the path converters' `toD` functions to pass converted values to the handler.
+
+
+## FAQ
+Q - Why the name Potcake?
+
+A - I am from The Bahamas where Potcakes are a breed of dog. They are easy to live with, sensible in their decision-making,
+and dependable. All great aspirational qualities for a web framework.
 
 
 ## Roadmap
