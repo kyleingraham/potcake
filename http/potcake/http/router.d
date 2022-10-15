@@ -1,11 +1,14 @@
-module typed_router.router;
+module potcake.http.router;
 
 import pegged.peg : ParseTree;
 import std.regex : Regex;
 import vibe.core.log : logDebug;
 import vibe.http.common : HTTPMethod;
-import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerRequestHandler, HTTPServerResponse;
+import vibe.http.server : HTTPServerRequestHandler;
 import vibe.http.status : HTTPStatus;
+
+// vibe.d components that are part of potcake.http.router's public API
+public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
 
 class ImproperlyConfigured : Exception
 {
@@ -124,7 +127,7 @@ PathConverterRef[string] pathConverterMap(BoundPathConverter[] boundPathConverte
     return mixin("converters");
 }
 
-template TypedURLRouter(BoundPathConverter[] userPathConverters = [])
+template Router(BoundPathConverter[] userPathConverters = [])
 {
     import std.array : join;
 
@@ -225,7 +228,7 @@ Path:
         throw new ImproperlyConfigured("No PathConverter found for converter path name '" ~ pathName ~ "'");
     }
 
-    final class TypedURLRouter : HTTPServerRequestHandler
+    final class Router : HTTPServerRequestHandler
     {
         private {
             Route[][HTTPMethod] routes;
@@ -271,7 +274,7 @@ Path:
                 return &middlewareDelegate;
             }
 
-            auto router = new TypedURLRouter!();
+            auto router = new Router!();
             router.get!"/hello/<name>/<int:age>/"(&helloUser);
             router.addMiddleware(&middleware);
         }
@@ -320,13 +323,13 @@ Path:
             }
         }
 
-        TypedURLRouter get(string path, Handler)(Handler handler)
+        Router get(string path, Handler)(Handler handler)
         if (isValidHandler!Handler)
         {
             return match!path(HTTPMethod.GET, handler);
         }
 
-        TypedURLRouter match(string path, Handler)(HTTPMethod method, Handler handler)
+        Router match(string path, Handler)(HTTPMethod method, Handler handler)
         if (isValidHandler!Handler)
         {
             import std.conv : to;

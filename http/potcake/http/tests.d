@@ -1,7 +1,6 @@
-module typed_router.tests;
+module potcake.http.tests;
 
-import typed_router.router : bindPathConverter, isValidHandler, TypedURLRouter;
-import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
+import potcake.http.router;
 
 // This converter must be placed in a module separate to TypedURLConverter to ensure no regression in being able to use
 // converters defined outside of the router's.
@@ -26,7 +25,7 @@ unittest
         assert(name == "PASS", "Used built-in 'string' path converter instead of user-supplied converter");
     }
 
-    auto router = new TypedURLRouter!([bindPathConverter!(TestStringConverter, "string")]);
+    auto router = new Router!([bindPathConverter!(TestStringConverter, "string")]);
     router.get!"/hello/<string:name>/"(&testHandler);
 
     auto res = createTestHTTPServerResponse();
@@ -61,7 +60,7 @@ unittest
         result ~= "D";
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/make/<string:model>/model/<int:make>/"(&a);
     router.get!"/<int:value>/"(&b);
     router.get!"/<int:value>"(&c);
@@ -95,7 +94,7 @@ unittest
         result ~= "A";
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/make/<string:model>/model/<make>/"(&a);
 
     auto res = createTestHTTPServerResponse();
@@ -122,7 +121,7 @@ unittest
         assert(id == 123456, "Did pass path value to handler");
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/a/<int:id>/"(&a);
     router.get!"/b/<int:id>/"(&b);
 
@@ -144,7 +143,7 @@ unittest
         result ~= "A";
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/<int:value>/"(&a);
 
     auto res = createTestHTTPServerResponse();
@@ -167,7 +166,7 @@ unittest
         result ~= "A";
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/<slug:value>/"(&a);
 
     auto res = createTestHTTPServerResponse();
@@ -191,7 +190,7 @@ unittest
         result ~= "A";
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/<uuid:value>/"(&a);
 
     auto res = createTestHTTPServerResponse();
@@ -223,7 +222,7 @@ unittest
         result ~= "A";
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/<string:value>/"(&a);
     router.get!"/<path:value>/"(&b);
 
@@ -279,7 +278,7 @@ unittest
     }
 
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/<string:value>/"(&a);
     router.get!"/<string:value>/"(&b);
 
@@ -325,7 +324,7 @@ unittest
         result ~= "C";
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/hello/"(&handlerA);
     router.addMiddleware(&middlewareA);
     router.addMiddleware(&middlewareB);
@@ -371,7 +370,7 @@ unittest
         result ~= "X";
     }
 
-    auto router = new TypedURLRouter!();
+    auto router = new Router!();
     router.get!"/hello/"(&handlerA);
     router.addMiddleware(&middlewareA);
     router.addMiddleware(&middlewareB);
