@@ -308,6 +308,11 @@ Path:
         {
             import std.regex : matchAll;
 
+            auto methodPresent = req.method in routes;
+
+            if (methodPresent is null)
+                return ;
+
             foreach (route; routes[req.method])
             {
                 auto matches = matchAll(req.path, route.pathRegex);
@@ -321,6 +326,17 @@ Path:
                 route.handler(req, res, route.pathCaptureGroups);
                 break ;
             }
+        }
+
+        Router any(string path, Handler)(Handler handler)
+        if (isValidHandler!Handler)
+        {
+            import std.traits : EnumMembers;
+
+            foreach (immutable method; [EnumMembers!HTTPMethod])
+                match!path(method, handler);
+
+            return this;
         }
 
         Router get(string path, Handler)(Handler handler)

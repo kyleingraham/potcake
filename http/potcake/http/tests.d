@@ -379,3 +379,30 @@ unittest
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/")), res);
     assert(result == "ABCD", "Did not short-circuit path through middleware to handler");
 }
+
+unittest
+{
+    // Do we create handlers for all HTTPMethod members when using Router.any?
+    import std.traits : EnumMembers;
+    import vibe.http.common : HTTPMethod;
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "A";
+    }
+
+    auto router = new Router!();
+    router.any!"/hello/"(&a);
+
+    auto res = createTestHTTPServerResponse();
+
+    auto allMethods = [EnumMembers!HTTPMethod];
+    foreach (immutable method; allMethods)
+        router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/"), method), res);
+
+    assert(result.length == allMethods.length, "Did not create handlers for all HTTPMethod members");
+}
