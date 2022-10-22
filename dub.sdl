@@ -5,6 +5,7 @@ copyright "Copyright © 2022, Kyle Ingraham"
 license "MIT"
 
 dependency "potcake:http" version="*"
+dependency "potcake:web" version="*"
 
 targetType "library"
 targetName "potcake"
@@ -28,4 +29,16 @@ subPackage {
 
     lflags "-L/opt/local/lib/openssl-3" platform="osx" // Location used by MacPorts for openssl3
     lflags "-L/opt/local/lib/openssl-1.1" platform="osx" // Location used by MacPorts for openssl11
+}
+
+subPackage {
+    name "web"
+    description "Potcake web framework higher-level web app components."
+
+    dependency "potcake:http" version="*"
+
+    targetType "library"
+
+    sourcePaths "web"
+    importPaths "web"
 }

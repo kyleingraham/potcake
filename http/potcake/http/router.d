@@ -7,6 +7,7 @@ import vibe.http.common : HTTPMethod;
 import vibe.http.server : HTTPServerRequestHandler;
 import vibe.http.status : HTTPStatus;
 
+// TODO: Restrict the symbols exported from this module
 // vibe.d components that are part of potcake.http.router's public API
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
 
@@ -25,7 +26,7 @@ struct IntConverter
     int toD(const string value) @safe
     {
         import std.conv : to;
-
+        // TODO: Handle std.conv.ConvOverflowException (1451412341412414)
         return to!int(value);
     }
 }
@@ -87,6 +88,9 @@ struct ParsedPath
 alias HandlerDelegate = void delegate(HTTPServerRequest req, HTTPServerResponse res, PathCaptureGroup[] pathCaptureGroups) @safe;
 
 alias MiddlewareDelegate = HTTPServerRequestDelegate delegate(HTTPServerRequestDelegate next) @safe;
+alias MiddlewareFunction = HTTPServerRequestDelegate function(HTTPServerRequestDelegate next) @safe;
+// TODO: tests for function middleware
+// TODO: warn user when middlware not safe
 
 struct Route
 {
@@ -315,6 +319,7 @@ Path:
 
             foreach (route; routes[req.method])
             {
+                // TODO: Switch to HTTPServerRequest.requestURI
                 auto matches = matchAll(req.path, route.pathRegex);
 
                 if (matches.empty())
@@ -357,6 +362,7 @@ Path:
 
             enum parsedPath = parsePath!(path, true);
 
+            // TODO: Trust less of this function
             HandlerDelegate handlerDelegate = (req, res, pathCaptureGroups) @trusted {
                 static if (Parameters!(handler).length == 2)
                     handler(req, res);
