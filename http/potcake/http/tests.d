@@ -3,7 +3,7 @@ module potcake.http.tests;
 import potcake.http.router;
 
 // This converter must be placed in a module separate to TypedURLConverter to ensure no regression in being able to use
-// converters defined outside of the router's.
+// converters defined outside of the router's module.
 package struct TestStringConverter
 {
     enum regex = "[^/]+";
@@ -25,8 +25,9 @@ unittest
         assert(name == "PASS", "Used built-in 'string' path converter instead of user-supplied converter");
     }
 
-    auto router = new Router!([bindPathConverter!(TestStringConverter, "string")]);
-    router.get!"/hello/<string:name>/"(&testHandler);
+    auto router = new Router;
+    router.addPathConverters([pathConverter("string", TestStringConverter())]);
+    router.get("/hello/<string:name>/", &testHandler);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/FAIL/")), res);
@@ -60,11 +61,11 @@ unittest
         result ~= "D";
     }
 
-    auto router = new Router!();
-    router.get!"/make/<string:model>/model/<int:make>/"(&a);
-    router.get!"/<int:value>/"(&b);
-    router.get!"/<int:value>"(&c);
-    router.get!"/no/path/converters/"(&d);
+    auto router = new Router;
+    router.get("/make/<string:model>/model/<int:make>/", &a);
+    router.get("/<int:value>/", &b);
+    router.get("/<int:value>", &c);
+    router.get("/no/path/converters/", &d);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/")), res);
@@ -83,7 +84,7 @@ unittest
 
 unittest
 {
-    // Do we set 'string' as the default path converter when non is specified?
+    // Do we set 'string' as the default path converter when none is specified?
     import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
     import vibe.inet.url : URL;
 
@@ -94,8 +95,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/make/<string:model>/model/<make>/"(&a);
+    auto router = new Router;
+    router.get("/make/<string:model>/model/<make>/", &a);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/make/porsche/model/911/")), res);
@@ -121,9 +122,9 @@ unittest
         assert(id == 123456, "Did pass path value to handler");
     }
 
-    auto router = new Router!();
-    router.get!"/a/<int:id>/"(&a);
-    router.get!"/b/<int:id>/"(&b);
+    auto router = new Router;
+    router.get("/a/<int:id>/", &a);
+    router.get("/b/<int:id>/", &b);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/a/123456/")), res);
@@ -143,8 +144,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/<int:value>/"(&a);
+    auto router = new Router;
+    router.get("/<int:value>/", &a);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1/")), res);
@@ -166,8 +167,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/<slug:value>/"(&a);
+    auto router = new Router;
+    router.get("/<slug:value>/", &a);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/slug-string/")), res);
@@ -190,8 +191,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/<uuid:value>/"(&a);
+    auto router = new Router;
+    router.get("/<uuid:value>/", &a);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1234abcd-1234-abcd-1234-abcd1234abcd/")), res);
@@ -222,9 +223,9 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/<string:value>/"(&a);
-    router.get!"/<path:value>/"(&b);
+    auto router = new Router;
+    router.get("/<string:value>/", &a);
+    router.get("/<path:value>/", &b);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/some/valid/path/")), res);
@@ -278,9 +279,9 @@ unittest
     }
 
 
-    auto router = new Router!();
-    router.get!"/<string:value>/"(&a);
-    router.get!"/<string:value>/"(&b);
+    auto router = new Router;
+    router.get("/<string:value>/", &a);
+    router.get("/<string:value>/", &b);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/value/")), res);
@@ -324,8 +325,8 @@ unittest
         result ~= "C";
     }
 
-    auto router = new Router!();
-    router.get!"/hello/"(&handlerA);
+    auto router = new Router;
+    router.get("/hello/", &handlerA);
     router.addMiddleware(&middlewareA);
     router.addMiddleware(&middlewareB);
 
@@ -370,8 +371,8 @@ unittest
         result ~= "X";
     }
 
-    auto router = new Router!();
-    router.get!"/hello/"(&handlerA);
+    auto router = new Router;
+    router.get("/hello/", &handlerA);
     router.addMiddleware(&middlewareA);
     router.addMiddleware(&middlewareB);
 
@@ -395,8 +396,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.any!"/hello/"(&a);
+    auto router = new Router;
+    router.any("/hello/", &a);
 
     auto res = createTestHTTPServerResponse();
 
@@ -406,3 +407,5 @@ unittest
 
     assert(result.length == allMethods.length, "Did not create handlers for all HTTPMethod members");
 }
+
+// TODO: Test that multiple handler parameters are supported.

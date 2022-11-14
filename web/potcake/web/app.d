@@ -3,63 +3,62 @@ module potcake.web.app;
 import potcake.http.router;
 import std.variant : Variant;
 
-class WebAppBuilder(WebAppBuildSettings buildSettings = WebAppBuildSettings())
-{
-    static WebApp!(buildSettings.userPathConverters) build(WebAppSettings appSettings = new WebAppSettings())
-    {
-        return new WebApp!(buildSettings.userPathConverters)(appSettings);
-    }
-}
-
-struct WebAppBuildSettings
-{
-    BoundPathConverter[] userPathConverters = [];
-}
-
-// How can we store a route handler? I've never stored one outside a delegate.
-// Variants are run-time objects.
-// The compiler needs to know how much space to allocate for storage.
-// Store calls to register route?
-
-alias RouteAdder = void delegate(T)(scope ref T webAppSettings) @safe;
-
-RouteAdder route(string path, Handler)(Handler handler, string name)
-{
-    // TODO: Do something with `name` for reversing
-    return (webAppSettings) @safe {
-        webAppSettings.addRoute!(path)(&handler);
-    };
-}
-
-class WebAppSettings
-{
-    string[] allowedHosts = ["localhost", "127.0.0.1", "::1"];
-    ushort port = 9000;
-}
+public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
+public import potcake.http.router : pathConverter;
 
 alias SettingsDelegate = Variant delegate(string setting) @safe;
 SettingsDelegate getSetting;
 
-class WebApp(BoundPathConverter[] userPathConverters = [])
+alias RouteAdder = void delegate(WebApp webApp) @safe;
+alias RouteConfig = RouteAdder[];
+
+class WebAppSettings
+{
+    string[] allowedHosts = ["localhost", "127.0.0.1" ];
+    ushort port = 9000;
+    RouteConfig rootRouteConfig = [];
+}
+
+RouteAdder route(Handler)(string path, Handler handler, string name)
+{
+    RouteAdder routeAdder = (webApp) @safe {
+        webApp.addRoute(path, handler);
+    };
+
+    return routeAdder;
+}
+
+class WebApp
 {
     import vibe.http.server : HTTPServerSettings;
 
     private {
         HTTPServerSettings vibeSettings;
-        alias WebAppRouter = Router!(userPathConverters);
-        WebAppRouter router;
+        Router router;
         WebAppSettings webAppSettings;
     }
 
-    this(T)(T webAppSettings)
+    this()
+    {
+        auto webAppSettings = new WebAppSettings;
+        this(webAppSettings);
+    }
+
+    this(PathConverterSpec[] pathConverters = [])
+    {
+        auto webAppSettings = new WebAppSettings;
+        this(webAppSettings, pathConverters);
+    }
+
+    this(T)(T webAppSettings, PathConverterSpec[] pathConverters = [])
     if (is(T : WebAppSettings))
     {
         this.webAppSettings = webAppSettings;
-        router = new WebAppRouter;
+
+        router = new Router;
+        router.addPathConverters(pathConverters);
 
         getSetting = (setting) @safe {
-            //Variant a = 3; // This is not safe
-            //return () @trusted {Variant a = 3; return a;}(); // But this is
             Variant fetchedSetting;
 
             switch (setting) {
@@ -67,38 +66,42 @@ class WebApp(BoundPathConverter[] userPathConverters = [])
                 {
                     import std.traits : isFunction;
 
-                    // Prevent latching onto built-in functions. Downside here is leaving out zero-parameter functions.
+                    // Prevent latching onto built-in functions. Downside here is leaving out zero-parameter functions. Could use arity.
                     static if (mixin("!isFunction!(T." ~ member ~ ")") && member != "Monitor")
                     {
                         mixin("case \"" ~ member ~ "\":");
+                        //Variant a = 3; // This is not safe
+                        //return () @trusted {Variant a = 3; return a;}(); // But this is
                         mixin("return () @trusted {fetchedSetting = __traits(getMember, webAppSettings, \"" ~ member ~ "\"); return fetchedSetting;}();");
                     }
                 }
 
-                default:
-                    throw new ImproperlyConfigured("Unknown setting: " ~ setting);
+                default: throw new ImproperlyConfigured("Unknown setting: " ~ setting);
             }
         };
     }
 
-    void addMiddleware(MiddlewareFunction middleware)
+    WebApp addMiddleware(MiddlewareFunction middleware)
     {
         import std.functional : toDelegate;
 
         addMiddleware(toDelegate(middleware));
+        return this;
     }
 
-    void addMiddleware(MiddlewareDelegate middleware)
+    WebApp addMiddleware(MiddlewareDelegate middleware)
     {
         // TODO: Add exception logging middleware
         router.addMiddleware(middleware);
+        return this;
     }
 
-    void addRoute(string path, Handler)(Handler handler)
+    WebApp addRoute(Handler)(string path, Handler handler)
     {
         // TODO: Handle ImproperlyConfigured and return useful message
         // TODO: & or no-& for handler?
-        router.any!(path)(handler);
+        router.any(path, handler);
+        return this;
     }
 
     int run()
@@ -110,6 +113,8 @@ class WebApp(BoundPathConverter[] userPathConverters = [])
         vibeSettings.bindAddresses = webAppSettings.allowedHosts;
         vibeSettings.port = webAppSettings.port;
 
+        addRoutes(webAppSettings.rootRouteConfig);
+
         auto listener = listenHTTP(vibeSettings, router);
 
         scope (exit)
@@ -118,6 +123,14 @@ class WebApp(BoundPathConverter[] userPathConverters = [])
         }
 
         return runApplication();
+    }
+
+    private WebApp addRoutes(RouteConfig routeConfig)
+    {
+        foreach (routeAdder; routeConfig)
+            routeAdder(this);
+
+        return this;
     }
 }
 
