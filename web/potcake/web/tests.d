@@ -61,6 +61,11 @@ unittest
         {
             return "PASS";
         }
+
+        string toPath(const string value) @safe
+        {
+            return value;
+        }
     }
 
     void runApp()
@@ -73,8 +78,36 @@ unittest
     void testApp()
     {
         string expectedName = "PASS";
-        auto content = get("http://127.0.0.1:9000/hello/" ~ expectedName ~ "/");
+        auto content = get("http://127.0.0.1:9000/hello/FAIL/");
         assert(content == expectedName, "Web app did not pass path converter to router.");
+    }
+
+    runTest((&runApp).funcptr, (&testApp).funcptr);
+}
+
+unittest
+{
+    // Do we reverse paths correctly?
+    void runApp()
+    {
+        void reverser(HTTPServerRequest req, HTTPServerResponse res, string routeName) @safe
+        {
+            import vibe.http.status : HTTPStatus;
+
+            res.contentType = "text/html; charset=UTF-8";
+            res.writeBody(reverse(routeName, "PASS"), HTTPStatus.ok);
+            exitEventLoop();
+        }
+
+        auto app = new WebApp;
+        app.addRoute("/hello/<string:name>/", &reverser, "reverser");
+        app.run();
+    }
+
+    void testApp()
+    {
+        auto content = get("http://127.0.0.1:9000/hello/reverser/");
+        assert(content == "/hello/PASS/", "reverse failed to provided reversed path");
     }
 
     runTest((&runApp).funcptr, (&testApp).funcptr);

@@ -6,8 +6,8 @@ import vibe.core.log : logDebug;
 import vibe.http.common : HTTPMethod;
 import vibe.http.server : HTTPServerRequestHandler;
 import vibe.http.status : HTTPStatus;
+import std.variant : Variant;
 
-// TODO: Restrict the symbols exported from this module
 // vibe.d components that are part of potcake.http.router's public API
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
 
@@ -19,21 +19,51 @@ class ImproperlyConfigured : Exception
     }
 }
 
+class NoReverseMatch : Exception
+{
+    this(string msg, string file = __FILE__, size_t line = __LINE__) @safe
+    {
+        super(msg, file, line);
+    }
+}
+
+class ConversionException : Exception
+{
+    this(string msg, string file = __FILE__, size_t line = __LINE__) @safe
+    {
+        super(msg, file, line);
+    }
+}
+
 struct IntConverter
 {
+    import std.conv : ConvOverflowException, to;
+
     enum regex = "[0-9]+";
 
     int toD(const string value) @safe
     {
-        import std.conv : to;
-        // TODO: Handle std.conv.ConvOverflowException (1451412341412414)
-        return to!int(value);
+        try {
+            return to!int(value);
+        } catch (ConvOverflowException e) {
+            throw new ConversionException(e.msg);
+        }
+    }
+
+    string toPath(int value) @safe
+    {
+        return to!string(value);
     }
 }
 
-mixin template StringToD()
+mixin template StringConverterMixin()
 {
     string toD(const string value) @safe
+    {
+        return value;
+    }
+
+    string toPath(string value) @safe
     {
         return value;
     }
@@ -43,14 +73,14 @@ struct StringConverter
 {
     enum regex = "[^/]+";
 
-    mixin StringToD;
+    mixin StringConverterMixin;
 }
 
 struct SlugConverter
 {
     enum regex = "[-a-zA-Z0-9_]+";
 
-    mixin StringToD;
+    mixin StringConverterMixin;
 }
 
 struct UUIDConverter
@@ -59,9 +89,14 @@ struct UUIDConverter
 
     enum regex = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
-    UUID toD(const string value) @safe
+    UUID toD(string value) @safe
     {
         return UUID(value);
+    }
+
+    string toPath(UUID value) @safe
+    {
+        return value.toString();
     }
 }
 
@@ -69,10 +104,10 @@ struct URLPathConverter
 {
     enum regex = ".+";
 
-    mixin StringToD;
+    mixin StringConverterMixin;
 }
 
-private struct PathCaptureGroup
+package struct PathCaptureGroup
 {
     string converterPathName;
     string pathParameter;
@@ -81,6 +116,7 @@ private struct PathCaptureGroup
 
 private struct ParsedPath
 {
+    string path;
     string regexPath;
     PathCaptureGroup[] pathCaptureGroups;
 }
@@ -90,7 +126,7 @@ private alias HandlerDelegate = void delegate(HTTPServerRequest req, HTTPServerR
 alias MiddlewareDelegate = HTTPServerRequestDelegate delegate(HTTPServerRequestDelegate next) @safe;
 alias MiddlewareFunction = HTTPServerRequestDelegate function(HTTPServerRequestDelegate next) @safe;
 // TODO: tests for function middleware
-// TODO: warn user when middlware not safe
+// TODO: warn user when middleware not safe
 
 private struct Route
 {
@@ -99,33 +135,31 @@ private struct Route
     PathCaptureGroup[] pathCaptureGroups;
 }
 
-alias PathConverterDelegate = void delegate(string value, void* convertedValue) @safe;
+private alias ToDDelegate = Variant delegate(string value) @safe;
+private alias ToPathDelegate = string delegate(Variant value) @safe;
 
 struct PathConverterSpec
 {
     string converterPathName;
-    PathConverterDelegate converterDelegate;
-    string converterRegex;
+    string regex;
+    ToDDelegate toDDelegate;
+    ToPathDelegate toPathDelegate;
 }
 
 PathConverterSpec pathConverter(PathConverterObject)(string converterPathName, PathConverterObject pathConverterObject)
 {
-    import core.lifetime : emplace;
-    import std.traits : isBasicType, isSomeString, moduleName, ReturnType;
-
-    PathConverterDelegate pcd = (value, convertedValue) @safe {
-        alias returnType = ReturnType!(pathConverterObject.toD);
-
-        static if (!(isBasicType!(returnType) || isSomeString!(returnType)))
-        {
-            mixin("import " ~ moduleName!(returnType) ~ " : " ~ __traits(identifier, returnType) ~ ";");
-        }
-
-        // TODO: Is this safe? Are we trusting the user to use the right type for the destination buffer?
-            (() @trusted => emplace(cast(mixin(returnType.stringof ~ "*"))convertedValue, pathConverterObject.toD(value)))();
+    ToDDelegate tdd = (value) @trusted {
+        return Variant(pathConverterObject.toD(value));
     };
 
-    return PathConverterSpec(converterPathName, pcd, pathConverterObject.regex);
+    ToPathDelegate tud = (value) @trusted {
+        import std.traits : Parameters;
+
+        alias paramType = Parameters!(pathConverterObject.toPath)[0];
+        return pathConverterObject.toPath(value.get!paramType);
+    };
+
+    return PathConverterSpec(converterPathName, pathConverterObject.regex, tdd, tud);
 }
 
 PathConverterSpec[] defaultPathConverters = [
@@ -136,12 +170,15 @@ PathConverterSpec[] defaultPathConverters = [
     pathConverter("path", URLPathConverter())
 ];
 
-final class Router : HTTPServerRequestHandler
+alias ConverterPathName = string;
+alias PathConverterRegex = string;
+alias RouteName = string;
+
+@safe final class Router : HTTPServerRequestHandler
 {
     private {
-        // TODO: Optimize maps after they are built.
-        PathConverterDelegate[string] converterMap;
-        string[string] regexMap;
+        PathConverterSpec[ConverterPathName] converterMap;
+        ParsedPath[RouteName] pathMap;
         Route[][HTTPMethod] routes;
         MiddlewareDelegate[] middleware;
         bool handlerNeedsUpdate = true;
@@ -150,7 +187,7 @@ final class Router : HTTPServerRequestHandler
 
     this()
     {
-        addPathConverters;
+        addPathConverters();
     }
 
     unittest
@@ -188,24 +225,25 @@ final class Router : HTTPServerRequestHandler
         router.addMiddleware(&middleware);
     }
 
-    void addMiddleware(MiddlewareDelegate middleware) @safe
+    void addMiddleware(MiddlewareDelegate middleware)
     {
         this.middleware ~= middleware;
         handlerNeedsUpdate = true;
     }
 
-    void handleRequest(HTTPServerRequest req, HTTPServerResponse res) @safe
+    void handleRequest(HTTPServerRequest req, HTTPServerResponse res)
     {
         if (handlerNeedsUpdate)
         {
             updateHandler();
+            rehashMaps();
             handlerNeedsUpdate = false;
         }
 
         handler(req, res);
     }
 
-    private void updateHandler() @safe
+    private void updateHandler()
     {
         handler = &routeRequest;
 
@@ -213,7 +251,14 @@ final class Router : HTTPServerRequestHandler
             handler = mw(handler);
     }
 
-    private void routeRequest(HTTPServerRequest req, HTTPServerResponse res) @safe
+    private void rehashMaps() @trusted
+    {
+        converterMap = converterMap.rehash();
+        pathMap = pathMap.rehash();
+        routes = routes.rehash();
+    }
+
+    private void routeRequest(HTTPServerRequest req, HTTPServerResponse res)
     {
         import std.regex : matchAll;
 
@@ -237,24 +282,24 @@ final class Router : HTTPServerRequestHandler
         }
     }
 
-    Router any(Handler)(string path, Handler handler) @safe
+    Router any(Handler)(string path, Handler handler, string routeName=null)
     if (isValidHandler!Handler)
     {
         import std.traits : EnumMembers;
 
         foreach (immutable method; [EnumMembers!HTTPMethod])
-            match(path, method, handler);
+            match(path, method, handler, routeName);
 
         return this;
     }
 
-    Router get(Handler)(string path, Handler handler) @safe
+    Router get(Handler)(string path, Handler handler, string routeName=null)
     if (isValidHandler!Handler)
     {
-        return match(path, HTTPMethod.GET, handler);
+        return match(path, HTTPMethod.GET, handler, routeName);
     }
 
-    Router match(Handler)(string path, HTTPMethod method, Handler handler) @safe
+    Router match(Handler)(string path, HTTPMethod method, Handler handler, string routeName=null)
     if (isValidHandler!Handler)
     {
         import std.conv : to;
@@ -272,21 +317,21 @@ final class Router : HTTPServerRequestHandler
             else
             {
                 enum nonReqResParamCount = Parameters!(handler).length - 2;
-                assert(parsedPath.pathCaptureGroups.length == nonReqResParamCount, format("Path (%s) handler's non-request/response parameter count (%s) does not match path parameter count (%s)", path, parsedPath.pathCaptureGroups.length, nonReqResParamCount));
+                assert(
+                    parsedPath.pathCaptureGroups.length == nonReqResParamCount,
+                    format(
+                        "Path (%s) handler's non-request/response parameter count (%s) does not match path parameter count (%s)",
+                        path,
+                        parsedPath.pathCaptureGroups.length,
+                        nonReqResParamCount
+                    )
+                );
 
                 auto tailArgs = tuple!(Parameters!(handler)[2..$]);
 
                 static foreach (i; 0 .. tailArgs.length)
                 {
-                    // TODO: Warn users that handler parameter and path converter return types need to be importable.
-                    static if (!(isBasicType!(Parameters!(handler)[i + 2]) || isSomeString!(Parameters!(handler)[i + 2])))
-                    {
-                        mixin("import " ~ moduleName!(Parameters!(handler)[i + 2]) ~ " : " ~ __traits(identifier, Parameters!(handler)[i + 2]) ~ ";");
-                    }
-
-                    mixin(Parameters!(handler)[i + 2].stringof ~ " output" ~ to!string(i) ~ ";");
-                        (() @trusted => converterMap[parsedPath.pathCaptureGroups[i].converterPathName](req.params.get(pathCaptureGroups[i].pathParameter), mixin("cast(void*) &output" ~ to!string(i))))();
-                    mixin("tailArgs[i] = output" ~ to!string(i) ~ ";");
+                    tailArgs[i] = (() @trusted => converterMap[parsedPath.pathCaptureGroups[i].converterPathName].toDDelegate(req.params.get(pathCaptureGroups[i].pathParameter)).get!(Parameters!(handler)[i + 2]))();
                 }
 
                 handler(req, res, tailArgs.expand);
@@ -300,12 +345,60 @@ final class Router : HTTPServerRequestHandler
 
         routes[method] ~= Route(regex(parsedPath.regexPath, "s"), hd, parsedPath.pathCaptureGroups); // Single-line mode works hand-in-hand with $ to exclude trailing slashes when matching.
 
+        if (!(routeName is null))
+            pathMap[routeName] = parsedPath;
+
         logDebug("Added %s route: %s", to!string(method), routes[method].back);
 
         return this;
     }
 
-    void addPathConverters(PathConverterSpec[] pathConverters = []) @safe
+    string reverse(T...)(string routeName, T pathArguments) const
+    {
+        import std.array : replaceFirst;
+        import std.format : format;
+        import std.uri : encode;
+        import std.variant : Variant, VariantException;
+
+        auto routePresent = routeName in pathMap;
+
+        if (routePresent is null)
+            throw new NoReverseMatch(format("No route registered for name '%s'", routeName));
+
+        auto pathData = pathMap[routeName];
+
+        if (!(pathArguments.length == pathData.pathCaptureGroups.length))
+            throw new NoReverseMatch("Count of path arguments given doesn't match count for those registered");
+
+        auto result = pathData.path[];
+
+        string toPath(T)(T value, string converterPathName) @trusted
+        {
+            auto wrappedValue = Variant(value);
+
+            try{
+                return converterMap[converterPathName].toPathDelegate(wrappedValue).encode;
+            } catch (VariantException e) {
+                throw new ConversionException(e.msg);
+            }
+        }
+
+        foreach (i, pa; pathArguments)
+        {
+            try {
+                result = result.replaceFirst(
+                    pathData.pathCaptureGroups[i].rawCaptureGroup,
+                    toPath(pa, pathData.pathCaptureGroups[i].converterPathName)
+                );
+            } catch (ConversionException e) {
+                throw new NoReverseMatch(format("Reverse not found for '%s' with '%s'", routeName, pathArguments));
+            }
+        }
+
+        return result;
+    }
+
+    void addPathConverters(PathConverterSpec[] pathConverters = [])
     {
         // This method must be called before adding handlers.
         import std.array : join;
@@ -313,16 +406,15 @@ final class Router : HTTPServerRequestHandler
         registerPathConverters([defaultPathConverters, pathConverters].join);
     }
 
-    private void registerPathConverters(PathConverterSpec[] pathConverters) @safe
+    private void registerPathConverters(PathConverterSpec[] pathConverters)
     {
         foreach (pathConverter; pathConverters)
         {
-            converterMap[pathConverter.converterPathName] = pathConverter.converterDelegate;
-            regexMap[pathConverter.converterPathName] = pathConverter.converterRegex;
+            converterMap[pathConverter.converterPathName] = pathConverter;
         }
     }
 
-    private ParsedPath parsePath(string path, bool isEndpoint=false) @safe
+    private ParsedPath parsePath(string path, bool isEndpoint=false)
     {
         import pegged.grammar;
 
@@ -339,10 +431,10 @@ Path:
         auto peggedPath = Path(path);
         auto pathCaptureGroups = getCaptureGroups(peggedPath);
 
-        return ParsedPath(getRegexPath(path, pathCaptureGroups, isEndpoint), pathCaptureGroups);
+        return ParsedPath(path, getRegexPath(path, pathCaptureGroups, isEndpoint), pathCaptureGroups);
     }
 
-    private PathCaptureGroup[] getCaptureGroups(ParseTree p) @safe
+    private PathCaptureGroup[] getCaptureGroups(ParseTree p)
     {
         PathCaptureGroup[] walkForGroups(ParseTree p)
         {
@@ -375,7 +467,7 @@ Path:
         return walkForGroups(p);
     }
 
-    private string getRegexPath(string path, PathCaptureGroup[] captureGroups, bool isEndpoint=false) @safe
+    private string getRegexPath(string path, PathCaptureGroup[] captureGroups, bool isEndpoint=false)
     {
         // Django converts 'foo/<int:pk>' to '^foo\\/(?P<pk>[0-9]+)'
         import std.array : replace, replaceFirst;
@@ -386,20 +478,22 @@ Path:
 
         foreach (group; captureGroups)
         {
-            result = result.replaceFirst(group.rawCaptureGroup, getRegexCaptureGroup(group.converterPathName, group.pathParameter));
+            result = result.replaceFirst(
+                group.rawCaptureGroup,
+                getRegexCaptureGroup(group.converterPathName, group.pathParameter)
+            );
         }
 
         return result;
     }
 
-    private string getRegexCaptureGroup(string converterPathName, string pathParameter) @safe
+    private string getRegexCaptureGroup(string converterPathName, string pathParameter)
     {
-        // TODO: Test membership check
-        auto converterRegistered = converterPathName in regexMap;
+        auto converterRegistered = converterPathName in converterMap;
         if (!converterRegistered)
             throw new ImproperlyConfigured("No path converter registered for '" ~ converterPathName ~ "'.");
 
-        return "(?P<" ~ pathParameter ~ ">" ~ regexMap[converterPathName] ~ ")";
+        return "(?P<" ~ pathParameter ~ ">" ~ converterMap[converterPathName].regex ~ ")";
     }
 }
 

@@ -7,6 +7,7 @@ public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, H
 public import potcake.http.router : pathConverter;
 
 alias SettingsDelegate = Variant delegate(string setting) @safe;
+
 SettingsDelegate getSetting;
 
 alias RouteAdder = void delegate(WebApp webApp) @safe;
@@ -14,21 +15,32 @@ alias RouteConfig = RouteAdder[];
 
 class WebAppSettings
 {
-    string[] allowedHosts = ["localhost", "127.0.0.1" ];
+    string[] allowedHosts = ["localhost", "127.0.0.1"];
     ushort port = 9000;
     RouteConfig rootRouteConfig = [];
 }
 
-RouteAdder route(Handler)(string path, Handler handler, string name)
+RouteAdder route(Handler)(string path, Handler handler, string name=null) @safe
 {
     RouteAdder routeAdder = (webApp) @safe {
-        webApp.addRoute(path, handler);
+        webApp.addRoute(path, handler, name);
     };
 
     return routeAdder;
 }
 
-class WebApp
+string reverse(T...)(string routeName, T pathArguments) @safe
+{
+    return getInitializedApp().reverse(routeName, pathArguments);
+}
+
+const(WebApp) getInitializedApp() @safe {
+    return initializedApp;
+}
+
+private WebApp initializedApp;
+
+@safe final class WebApp
 {
     import vibe.http.server : HTTPServerSettings;
 
@@ -81,11 +93,16 @@ class WebApp
         };
     }
 
+    string reverse(T...)(string routeName, T pathArguments) const
+    {
+        return router.reverse(routeName, pathArguments);
+    }
+
     WebApp addMiddleware(MiddlewareFunction middleware)
     {
         import std.functional : toDelegate;
 
-        addMiddleware(toDelegate(middleware));
+        addMiddleware((() @trusted => toDelegate(middleware))());
         return this;
     }
 
@@ -96,11 +113,9 @@ class WebApp
         return this;
     }
 
-    WebApp addRoute(Handler)(string path, Handler handler)
+    WebApp addRoute(Handler)(string path, Handler handler, string name=null)
     {
-        // TODO: Handle ImproperlyConfigured and return useful message
-        // TODO: & or no-& for handler?
-        router.any(path, handler);
+        router.any(path, handler, name);
         return this;
     }
 
@@ -121,6 +136,8 @@ class WebApp
         {
             listener.stopListening();
         }
+
+        initializedApp = this;
 
         return runApplication();
     }
