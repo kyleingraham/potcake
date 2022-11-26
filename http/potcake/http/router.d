@@ -403,12 +403,7 @@ alias RouteName = string;
         // This method must be called before adding handlers.
         import std.array : join;
 
-        registerPathConverters([defaultPathConverters, pathConverters].join);
-    }
-
-    private void registerPathConverters(PathConverterSpec[] pathConverters)
-    {
-        foreach (pathConverter; pathConverters)
+        foreach (pathConverter; [defaultPathConverters, pathConverters].join)
         {
             converterMap[pathConverter.converterPathName] = pathConverter;
         }
