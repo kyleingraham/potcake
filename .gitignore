@@ -8,11 +8,14 @@ libpotcake*.dylib
 libpotcake*.dll
 libpotcake*.a
 libpotcake*.lib
+potcake*.lib
 potcake-test-*
 *.exe
 *.o
 *.obj
 *.lst
 *.pdb
+*.dll
 
 .idea
+*.iml
