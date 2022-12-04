@@ -18,6 +18,9 @@ class WebAppSettings
     string[] allowedHosts = ["localhost", "127.0.0.1"];
     ushort port = 9000;
     RouteConfig rootRouteConfig = [];
+    string[] staticDirectories = [];
+    string staticRoot;
+    string staticRoutePath;
 }
 
 RouteAdder route(Handler)(string path, Handler handler, string name=null) @safe
@@ -32,6 +35,15 @@ RouteAdder route(Handler)(string path, Handler handler, string name=null) @safe
 string reverse(T...)(string routeName, T pathArguments) @safe
 {
     return getInitializedApp().reverse(routeName, pathArguments);
+}
+
+string staticPath(string relativePath) @safe
+{
+    import urllibparse : urlJoin;
+
+    auto basePath = (() @trusted => getSetting("staticRoutePath").get!string)();
+    assert(0 < basePath.length, "The 'staticRoot' setting must be set to generate static paths.");
+    return urlJoin(basePath, relativePath);
 }
 
 const(WebApp) getInitializedApp() @safe {
@@ -93,11 +105,6 @@ private WebApp initializedApp;
         };
     }
 
-    string reverse(T...)(string routeName, T pathArguments) const
-    {
-        return router.reverse(routeName, pathArguments);
-    }
-
     WebApp addMiddleware(MiddlewareFunction middleware)
     {
         import std.functional : toDelegate;
@@ -119,10 +126,44 @@ private WebApp initializedApp;
         return this;
     }
 
-    int run()
+    string reverse(T...)(string routeName, T pathArguments) const
+    {
+        return router.reverse(routeName, pathArguments);
+    }
+
+    WebApp serveStaticFiles()
+    {
+        import std.exception : enforce;
+
+        enforce!ImproperlyConfigured(
+            0 < webAppSettings.staticRoot.length &&
+            0 < webAppSettings.staticDirectories.length &&
+            0 < webAppSettings.staticRoutePath.length,
+            "The 'staticRoot', 'staticDirectories', and 'staticRoutePath' settings must be set to serve collected static files."
+        );
+
+        return serveStaticFiles(webAppSettings.staticRoutePath, webAppSettings.staticRoot);
+    }
+
+    WebApp serveStaticFiles(string routePath, string directoryPath)
+    {
+        import std.string : stripRight;
+        import vibe.http.fileserver : HTTPFileServerSettings, serveStaticFiles;
+
+        auto routePathPrefix = routePath.stripRight("/");
+        auto settings = new HTTPFileServerSettings(routePathPrefix);
+        router.get(routePathPrefix ~ "<path:static_file_path>", serveStaticFiles(directoryPath, settings));
+        return this;
+    }
+
+    int run(string[] args = [])
     {
         import vibe.http.server : listenHTTP;
         import vibe.core.core : runApplication;
+
+        bool shouldExit = handleArgs(args);
+        if (shouldExit)
+            return 0;
 
         vibeSettings = new HTTPServerSettings;
         vibeSettings.bindAddresses = webAppSettings.allowedHosts;
@@ -148,6 +189,80 @@ private WebApp initializedApp;
             routeAdder(this);
 
         return this;
+    }
+
+    private bool handleArgs(string[] args)
+    {
+        if (args.length <= 1)
+            return false;
+
+        if (args[1] == "--collectstatic")
+        {
+            collectStaticFiles();
+            return true;
+        }
+
+        return false;
+    }
+
+    private void collectStaticFiles()
+    {
+        import std.array : join;
+        import std.exception : enforce;
+        import std.file : exists, isDir, mkdir, rmdirRecurse;
+        import std.path : absolutePath, buildPath, isAbsolute;
+        import std.process : execute;
+        import std.stdio : writeln;
+
+        enforce!ImproperlyConfigured(
+            0 < webAppSettings.staticRoot.length,
+            "The 'staticRoot' setting must be set to collect static files."
+        );
+
+        enforce!ImproperlyConfigured(
+            0 < webAppSettings.staticDirectories.length,
+            "The 'staticDirectories' setting must be set to collect static files."
+        );
+
+        writeln("Collecting static files...");
+
+        auto staticRootPath =
+        webAppSettings.staticRoot.isAbsolute ? webAppSettings.staticRoot : webAppSettings.staticRoot.absolutePath;
+
+        if (staticRootPath.exists && staticRootPath.isDir)
+            staticRootPath.rmdirRecurse;
+
+        staticRootPath.mkdir;
+
+        version(Windows)
+        {
+            string[] paths = [];
+
+            foreach (staticDirectory; webAppSettings.staticDirectories)
+            {
+                auto staticDirectoryPath = staticDirectory.isAbsolute ? staticDirectory : staticDirectory.absolutePath;
+                staticDirectoryPath = "'" ~ staticDirectoryPath.buildPath("*") ~ "'";
+                paths ~= staticDirectoryPath;
+            }
+
+            auto joinedPaths = paths.join(",");
+
+            auto command = ["powershell", "Copy-Item", "-Path", joinedPaths, "-Destination", "'" ~ staticRootPath ~ "'", "-Recurse", "-Force"];
+
+            auto copyExecution = execute(command);
+
+            if (copyExecution.status != 0)
+            {
+                writeln("Static file collecting failed:\n", copyExecution.output);
+                assert(false);
+            }
+        }
+        else
+        {
+            assert(false, "Static file collecting has only been implemented for Windows.");
+        }
+
+        writeln("Collected static files.");
     }
 }
 

@@ -10,8 +10,8 @@ dependency "potcake:web" version="*"
 targetType "library"
 targetName "potcake"
 
-sourcePaths "."
-importPaths "."
+sourcePaths "http" "web"
+importPaths "http" "web"
 
 subPackage {
     name "http"
@@ -36,6 +36,7 @@ subPackage {
     description "Potcake web framework higher-level web app components."
 
     dependency "potcake:http" version="*"
+    dependency "urllibparse" version="~>0.1.0"
 
     targetType "library"
 

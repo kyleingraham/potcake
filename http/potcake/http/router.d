@@ -2,7 +2,7 @@ module potcake.http.router;
 
 import pegged.peg : ParseTree;
 import std.regex : Regex;
-import vibe.core.log : logDebug;
+import vibe.core.log : logTrace;
 import vibe.http.common : HTTPMethod;
 import vibe.http.server : HTTPServerRequestHandler;
 import vibe.http.status : HTTPStatus;
@@ -348,7 +348,7 @@ alias RouteName = string;
         if (!(routeName is null))
             pathMap[routeName] = parsedPath;
 
-        logDebug("Added %s route: %s", to!string(method), routes[method].back);
+        logTrace("Added %s route: %s", to!string(method), routes[method].back);
 
         return this;
     }
