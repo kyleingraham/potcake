@@ -152,14 +152,14 @@ PathConverterSpec pathConverter(PathConverterObject)(string converterPathName, P
         return Variant(pathConverterObject.toD(value));
     };
 
-    ToPathDelegate tud = (value) @trusted {
+    ToPathDelegate tpd = (value) @trusted {
         import std.traits : Parameters;
 
         alias paramType = Parameters!(pathConverterObject.toPath)[0];
         return pathConverterObject.toPath(value.get!paramType);
     };
 
-    return PathConverterSpec(converterPathName, pathConverterObject.regex, tdd, tud);
+    return PathConverterSpec(converterPathName, pathConverterObject.regex, tdd, tpd);
 }
 
 PathConverterSpec[] defaultPathConverters = [
