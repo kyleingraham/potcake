@@ -3,4 +3,5 @@ description "Demonstrates a web app that serves collected static files."
 
 dependency "potcake:web" path="../../"
 
-postBuildCommands "\"$DUB_TARGET_PATH\\$DUB_ROOT_PACKAGE_TARGET_NAME\" --collectstatic"
+postBuildCommands "\"$DUB_TARGET_PATH\\$DUB_ROOT_PACKAGE_TARGET_NAME\" --collectstatic" platform="windows"
+postBuildCommands "\"$DUB_TARGET_PATH/$DUB_ROOT_PACKAGE_TARGET_NAME\" --collectstatic" platform="posix"

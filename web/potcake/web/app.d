@@ -161,9 +161,9 @@ private WebApp initializedApp;
         import vibe.http.server : listenHTTP;
         import vibe.core.core : runApplication;
 
-        bool shouldExit = handleArgs(args);
-        if (shouldExit)
-            return 0;
+        auto returnCode = handleArgs(args);
+        if (returnCode != -1)
+            return returnCode;
 
         vibeSettings = new HTTPServerSettings;
         vibeSettings.bindAddresses = webAppSettings.allowedHosts;
@@ -191,40 +191,43 @@ private WebApp initializedApp;
         return this;
     }
 
-    private bool handleArgs(string[] args)
+    private int handleArgs(string[] args)
     {
         if (args.length <= 1)
-            return false;
+            return -1;
 
         if (args[1] == "--collectstatic")
         {
-            collectStaticFiles();
-            return true;
+            return collectStaticFiles();
         }
-
-        return false;
+        else
+        {
+            return -1;
+        }
     }
 
-    private void collectStaticFiles()
+    private int collectStaticFiles()
     {
         import std.array : join;
-        import std.exception : enforce;
         import std.file : exists, isDir, mkdir, rmdirRecurse;
         import std.path : absolutePath, buildPath, isAbsolute;
-        import std.process : execute;
-        import std.stdio : writeln;
+        import std.process : execute, executeShell;
+        import std.string : strip;
+        import vibe.core.log : logDebug, logInfo, logFatal;
 
-        enforce!ImproperlyConfigured(
-            0 < webAppSettings.staticRoot.length,
-            "The 'staticRoot' setting must be set to collect static files."
-        );
+        if (webAppSettings.staticRoot.length == 0)
+        {
+            logFatal("The 'staticRoot' setting must be set to collect static files.");
+            return 1;
+        }
 
-        enforce!ImproperlyConfigured(
-            0 < webAppSettings.staticDirectories.length,
-            "The 'staticDirectories' setting must be set to collect static files."
-        );
+        if (webAppSettings.staticDirectories.length == 0)
+        {
+            logFatal("The 'staticDirectories' setting must be set to collect static files.");
+            return 1;
+        }
 
-        writeln("Collecting static files...");
+        logInfo("Collecting static files...");
 
         auto staticRootPath =
         webAppSettings.staticRoot.isAbsolute ? webAppSettings.staticRoot : webAppSettings.staticRoot.absolutePath;
@@ -236,33 +239,47 @@ private WebApp initializedApp;
 
         version(Windows)
         {
-            string[] paths = [];
-
-            foreach (staticDirectory; webAppSettings.staticDirectories)
-            {
-                auto staticDirectoryPath = staticDirectory.isAbsolute ? staticDirectory : staticDirectory.absolutePath;
-                staticDirectoryPath = "'" ~ staticDirectoryPath.buildPath("*") ~ "'";
-                paths ~= staticDirectoryPath;
-            }
-
-            auto joinedPaths = paths.join(",");
-
-            auto command = ["powershell", "Copy-Item", "-Path", joinedPaths, "-Destination", "'" ~ staticRootPath ~ "'", "-Recurse", "-Force"];
-
-            auto copyExecution = execute(command);
-
-            if (copyExecution.status != 0)
-            {
-                writeln("Static file collecting failed:\n", copyExecution.output);
-                assert(false);
-            }
+            auto pathTerminator = "*";
+            auto pathSeparator = ",";
         }
         else
         {
-            assert(false, "Static file collecting has only been implemented for Windows.");
+            auto pathTerminator = " "; // Gets us a trailing '/ '. rsync needs a '/' so we remove the ' ' downstream.
+            auto pathSeparator = " ";
         }
 
-        writeln("Collected static files.");
+        string[] paths = [];
+
+        foreach (staticDirectory; webAppSettings.staticDirectories)
+        {
+            auto staticDirectoryPath = staticDirectory.isAbsolute ? staticDirectory : staticDirectory.absolutePath;
+            staticDirectoryPath = "'" ~ staticDirectoryPath.buildPath(pathTerminator).strip ~ "'";
+            paths ~= staticDirectoryPath;
+        }
+
+        auto joinedPaths = paths.join(pathSeparator);
+
+        version(Windows)
+        {
+            auto command = ["powershell", "Copy-Item", "-Path", joinedPaths, "-Destination", "'" ~ staticRootPath ~ "'", "-Recurse", "-Force"];
+            logDebug("Copy command: %s", command);
+            auto copyExecution = execute(command);
+        }
+        else
+        {
+            auto command = "rsync -a " ~ joinedPaths ~ " '" ~ staticRootPath ~ "'";
+            logDebug("Copy command: %s", command);
+            auto copyExecution = executeShell(command);
+        }
+
+        if (copyExecution.status != 0)
+        {
+            logFatal("Static file collecting failed:\n%s", copyExecution.output);
+            return 1;
+        }
+
+        logInfo("Collected static files.");
+        return 0;
     }
 }
 
