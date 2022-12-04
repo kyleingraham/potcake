@@ -35,13 +35,13 @@ class ConversionException : Exception
     }
 }
 
-struct IntConverter
+@safe struct IntConverter
 {
     import std.conv : ConvOverflowException, to;
 
     enum regex = "[0-9]+";
 
-    int toD(const string value) @safe
+    int toD(const string value)
     {
         try {
             return to!int(value);
@@ -50,57 +50,57 @@ struct IntConverter
         }
     }
 
-    string toPath(int value) @safe
+    string toPath(int value)
     {
         return to!string(value);
     }
 }
 
-mixin template StringConverterMixin()
+@safe mixin template StringConverterMixin()
 {
-    string toD(const string value) @safe
+    string toD(const string value)
     {
         return value;
     }
 
-    string toPath(string value) @safe
+    string toPath(string value)
     {
         return value;
     }
 }
 
-struct StringConverter
+@safe struct StringConverter
 {
     enum regex = "[^/]+";
 
     mixin StringConverterMixin;
 }
 
-struct SlugConverter
+@safe struct SlugConverter
 {
     enum regex = "[-a-zA-Z0-9_]+";
 
     mixin StringConverterMixin;
 }
 
-struct UUIDConverter
+@safe struct UUIDConverter
 {
     import std.uuid : UUID;
 
     enum regex = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
-    UUID toD(string value) @safe
+    UUID toD(string value)
     {
         return UUID(value);
     }
 
-    string toPath(UUID value) @safe
+    string toPath(UUID value)
     {
         return value.toString();
     }
 }
 
-struct URLPathConverter
+@safe struct URLPathConverter
 {
     enum regex = ".+";
 
@@ -146,7 +146,7 @@ struct PathConverterSpec
     ToPathDelegate toPathDelegate;
 }
 
-PathConverterSpec pathConverter(PathConverterObject)(string converterPathName, PathConverterObject pathConverterObject)
+PathConverterSpec pathConverter(PathConverterObject)(string converterPathName, PathConverterObject pathConverterObject) @safe
 {
     ToDDelegate tdd = (value) @trusted {
         return Variant(pathConverterObject.toD(value));
