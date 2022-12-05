@@ -20,7 +20,7 @@ class WebAppSettings
     ushort port = 9000;
     RouteConfig rootRouteConfig = [];
     string[] staticDirectories = [];
-    string staticRoot;
+    string rootStaticDirectory;
     string staticRoutePath;
 }
 
@@ -43,7 +43,7 @@ string staticPathImpl(string relativePath) @safe
     import urllibparse : urlJoin;
 
     auto basePath = (() @trusted => getSetting("staticRoutePath").get!string)();
-    assert(0 < basePath.length, "The 'staticRoot' setting must be set to generate static paths.");
+    assert(0 < basePath.length, "The 'rootStaticDirectory' setting must be set to generate static paths.");
     return urlJoin(basePath, relativePath);
 }
 
@@ -139,13 +139,13 @@ private WebApp initializedApp;
         import std.exception : enforce;
 
         enforce!ImproperlyConfigured(
-            0 < webAppSettings.staticRoot.length &&
+            0 < webAppSettings.rootStaticDirectory.length &&
             0 < webAppSettings.staticDirectories.length &&
             0 < webAppSettings.staticRoutePath.length,
-            "The 'staticRoot', 'staticDirectories', and 'staticRoutePath' settings must be set to serve collected static files."
+            "The 'rootStaticDirectory', 'staticDirectories', and 'staticRoutePath' settings must be set to serve collected static files."
         );
 
-        return serveStaticFiles(webAppSettings.staticRoutePath, webAppSettings.staticRoot);
+        return serveStaticFiles(webAppSettings.staticRoutePath, webAppSettings.rootStaticDirectory);
     }
 
     WebApp serveStaticFiles(string routePath, string directoryPath)
@@ -218,9 +218,9 @@ private WebApp initializedApp;
         import std.string : strip;
         import vibe.core.log : logDebug, logInfo, logFatal;
 
-        if (webAppSettings.staticRoot.length == 0)
+        if (webAppSettings.rootStaticDirectory.length == 0)
         {
-            logFatal("The 'staticRoot' setting must be set to collect static files.");
+            logFatal("The 'rootStaticDirectory' setting must be set to collect static files.");
             return 1;
         }
 
@@ -232,13 +232,15 @@ private WebApp initializedApp;
 
         logInfo("Collecting static files...");
 
-        auto staticRootPath =
-        webAppSettings.staticRoot.isAbsolute ? webAppSettings.staticRoot : webAppSettings.staticRoot.absolutePath;
+        auto rootStaticDirectoryPath =
+        webAppSettings.rootStaticDirectory.isAbsolute ?
+        webAppSettings.rootStaticDirectory :
+        webAppSettings.rootStaticDirectory.absolutePath;
 
-        if (staticRootPath.exists && staticRootPath.isDir)
-            staticRootPath.rmdirRecurse;
+        if (rootStaticDirectoryPath.exists && rootStaticDirectoryPath.isDir)
+            rootStaticDirectoryPath.rmdirRecurse;
 
-        staticRootPath.mkdir;
+        rootStaticDirectoryPath.mkdir;
 
         version(Windows)
         {
@@ -264,13 +266,22 @@ private WebApp initializedApp;
 
         version(Windows)
         {
-            auto command = ["powershell", "Copy-Item", "-Path", joinedPaths, "-Destination", "'" ~ staticRootPath ~ "'", "-Recurse", "-Force"];
+            auto command = [
+                "powershell",
+                "Copy-Item",
+                "-Path",
+                joinedPaths,
+                "-Destination",
+                "'" ~ rootStaticDirectoryPath ~ "'",
+                "-Recurse",
+                "-Force"
+            ];
             logDebug("Copy command: %s", command);
             auto copyExecution = execute(command);
         }
         else
         {
-            auto command = "rsync -a " ~ joinedPaths ~ " '" ~ staticRootPath ~ "'";
+            auto command = "rsync -a " ~ joinedPaths ~ " '" ~ rootStaticDirectoryPath ~ "'";
             logDebug("Copy command: %s", command);
             auto copyExecution = executeShell(command);
         }

@@ -4,7 +4,7 @@ int main(string[] args)
 {
     auto settings = new WebAppSettings;
     settings.staticDirectories = ["static_a", "static_b"];
-    settings.staticRoot = "staticroot";
+    settings.rootStaticDirectory = "staticroot";
     settings.staticRoutePath = "/static/";
 
     auto webApp = new WebApp(settings);
