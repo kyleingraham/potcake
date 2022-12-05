@@ -1,6 +1,7 @@
 module potcake.web.app;
 
 import potcake.http.router;
+import std.functional : memoize;
 import std.variant : Variant;
 
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
@@ -37,7 +38,7 @@ string reverse(T...)(string routeName, T pathArguments) @safe
     return getInitializedApp().reverse(routeName, pathArguments);
 }
 
-string staticPath(string relativePath) @safe
+string staticPathImpl(string relativePath) @safe
 {
     import urllibparse : urlJoin;
 
@@ -45,6 +46,8 @@ string staticPath(string relativePath) @safe
     assert(0 < basePath.length, "The 'staticRoot' setting must be set to generate static paths.");
     return urlJoin(basePath, relativePath);
 }
+
+alias staticPath = memoize!staticPathImpl;
 
 const(WebApp) getInitializedApp() @safe {
     return initializedApp;
