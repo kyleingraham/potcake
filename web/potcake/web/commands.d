@@ -55,7 +55,6 @@ int collectStaticFilesCommand()
 
     auto joinedPaths = paths.join(pathSeparator);
 
-    // TODO: Do these commands prioritize newer files?
     version(Windows)
     {
         auto command = [
