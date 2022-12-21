@@ -1,3 +1,5 @@
+@safe:
+
 import potcake.web;
 
 int main()
@@ -10,7 +12,7 @@ int main()
     return webApp.run();
 }
 
-void handler(HTTPServerRequest req, HTTPServerResponse res) @safe
+void handler(HTTPServerRequest req, HTTPServerResponse res)
 {
     import vibe.http.status : HTTPStatus;
 

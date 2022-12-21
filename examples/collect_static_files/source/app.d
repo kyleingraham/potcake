@@ -1,3 +1,5 @@
+@safe:
+
 import potcake.web;
 
 int main(string[] args)
@@ -5,7 +7,7 @@ int main(string[] args)
     auto settings = new WebAppSettings;
     settings.staticDirectories = ["static_a", "static_b"];
     settings.rootStaticDirectory = "staticroot";
-    settings.staticRoutePath = "/static/";
+    settings.staticRoutePath = "/static";
 
     auto webApp = new WebApp(settings);
     webApp
@@ -15,7 +17,7 @@ int main(string[] args)
     return webApp.run(args);
 }
 
-void handler(HTTPServerRequest req, HTTPServerResponse res) @safe
+void handler(HTTPServerRequest req, HTTPServerResponse res)
 {
     import vibe.http.status : HTTPStatus;
 

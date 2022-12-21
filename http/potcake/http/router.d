@@ -125,8 +125,6 @@ private alias HandlerDelegate = void delegate(HTTPServerRequest req, HTTPServerR
 
 alias MiddlewareDelegate = HTTPServerRequestDelegate delegate(HTTPServerRequestDelegate next) @safe;
 alias MiddlewareFunction = HTTPServerRequestDelegate function(HTTPServerRequestDelegate next) @safe;
-// TODO: tests for function middleware
-// TODO: warn user when middleware not safe
 
 private struct Route
 {

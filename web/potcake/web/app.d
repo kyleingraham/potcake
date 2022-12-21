@@ -1,17 +1,18 @@
 module potcake.web.app;
+@safe:
 
-import potcake.http.router;
+import potcake.http.router : Router;
 import std.functional : memoize;
 import std.variant : Variant;
 
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
-public import potcake.http.router : pathConverter;
+public import potcake.http.router : MiddlewareFunction, MiddlewareDelegate, pathConverter, PathConverterSpec;
 
-alias SettingsDelegate = Variant delegate(string setting) @safe;
+alias SettingsDelegate = Variant delegate(string setting);
 
 SettingsDelegate getSetting;
 
-alias RouteAdder = void delegate(WebApp webApp) @safe;
+alias RouteAdder = void delegate(WebApp webApp);
 alias RouteConfig = RouteAdder[];
 
 class WebAppSettings
@@ -24,39 +25,46 @@ class WebAppSettings
     string staticRoutePath;
 }
 
-RouteAdder route(Handler)(string path, Handler handler, string name=null) @safe
+RouteAdder route(Handler)(string path, Handler handler, string name=null)
 {
-    RouteAdder routeAdder = (webApp) @safe {
+    RouteAdder routeAdder = (webApp) {
         webApp.addRoute(path, handler, name);
     };
 
     return routeAdder;
 }
 
-string reverse(T...)(string routeName, T pathArguments) @safe
+string reverse(T...)(string routeName, T pathArguments)
 {
     return getInitializedApp().reverse(routeName, pathArguments);
 }
 
-string staticPathImpl(string relativePath) @safe
+static immutable char urlSeparator = '/';
+
+string staticPathImpl(string relativePath)
 {
     import urllibparse : urlJoin;
 
     auto basePath = (() @trusted => getSetting("staticRoutePath").get!string)();
     assert(0 < basePath.length, "The 'rootStaticDirectory' setting must be set to generate static paths.");
+
+    if (basePath[$-1] != urlSeparator)
+        basePath ~= urlSeparator;
+
     return urlJoin(basePath, relativePath);
 }
 
 alias staticPath = memoize!staticPathImpl;
 
-const(WebApp) getInitializedApp() @safe {
+const(WebApp) getInitializedApp() {
     return initializedApp;
 }
 
 private WebApp initializedApp;
 
-@safe final class WebApp
+final class WebApp
 {
+    import potcake.http.router : ImproperlyConfigured;
     import vibe.http.server : HTTPServerSettings;
 
     private {
@@ -85,7 +93,7 @@ private WebApp initializedApp;
         router = new Router;
         router.addPathConverters(pathConverters);
 
-        getSetting = (setting) @safe {
+        getSetting = (setting) {
             Variant fetchedSetting;
 
             switch (setting) {
@@ -118,7 +126,6 @@ private WebApp initializedApp;
 
     WebApp addMiddleware(MiddlewareDelegate middleware)
     {
-        // TODO: Add exception logging middleware
         router.addMiddleware(middleware);
         return this;
     }
@@ -164,15 +171,17 @@ private WebApp initializedApp;
         import vibe.http.server : listenHTTP;
         import vibe.core.core : runApplication;
 
-        auto returnCode = handleArgs(args);
-        if (returnCode != -1)
-            return returnCode;
-
         vibeSettings = new HTTPServerSettings;
         vibeSettings.bindAddresses = webAppSettings.allowedHosts;
         vibeSettings.port = webAppSettings.port;
 
         addRoutes(webAppSettings.rootRouteConfig);
+
+        initializedApp = this;
+
+        auto returnCode = handleArgs(args);
+        if (returnCode != -1)
+            return returnCode;
 
         auto listener = listenHTTP(vibeSettings, router);
 
@@ -180,8 +189,6 @@ private WebApp initializedApp;
         {
             listener.stopListening();
         }
-
-        initializedApp = this;
 
         return runApplication();
     }
@@ -196,104 +203,19 @@ private WebApp initializedApp;
 
     private int handleArgs(string[] args)
     {
+        import potcake.web.commands : collectStaticFilesCommand;
+
         if (args.length <= 1)
             return -1;
 
         if (args[1] == "--collectstatic")
         {
-            return collectStaticFiles();
+            return collectStaticFilesCommand();
         }
         else
         {
             return -1;
         }
-    }
-
-    private int collectStaticFiles()
-    {
-        import std.array : join;
-        import std.file : exists, isDir, mkdir, rmdirRecurse;
-        import std.path : absolutePath, buildPath, isAbsolute;
-        import std.process : execute, executeShell;
-        import std.string : strip;
-        import vibe.core.log : logDebug, logInfo, logFatal;
-
-        if (webAppSettings.rootStaticDirectory.length == 0)
-        {
-            logFatal("The 'rootStaticDirectory' setting must be set to collect static files.");
-            return 1;
-        }
-
-        if (webAppSettings.staticDirectories.length == 0)
-        {
-            logFatal("The 'staticDirectories' setting must be set to collect static files.");
-            return 1;
-        }
-
-        logInfo("Collecting static files...");
-
-        auto rootStaticDirectoryPath =
-        webAppSettings.rootStaticDirectory.isAbsolute ?
-        webAppSettings.rootStaticDirectory :
-        webAppSettings.rootStaticDirectory.absolutePath;
-
-        if (rootStaticDirectoryPath.exists && rootStaticDirectoryPath.isDir)
-            rootStaticDirectoryPath.rmdirRecurse;
-
-        rootStaticDirectoryPath.mkdir;
-
-        version(Windows)
-        {
-            auto pathTerminator = "*";
-            auto pathSeparator = ",";
-        }
-        else
-        {
-            auto pathTerminator = " "; // Gets us a trailing '/ '. rsync needs a '/' so we remove the ' ' downstream.
-            auto pathSeparator = " ";
-        }
-
-        string[] paths = [];
-
-        foreach (staticDirectory; webAppSettings.staticDirectories)
-        {
-            auto staticDirectoryPath = staticDirectory.isAbsolute ? staticDirectory : staticDirectory.absolutePath;
-            staticDirectoryPath = "'" ~ staticDirectoryPath.buildPath(pathTerminator).strip ~ "'";
-            paths ~= staticDirectoryPath;
-        }
-
-        auto joinedPaths = paths.join(pathSeparator);
-
-        version(Windows)
-        {
-            auto command = [
-                "powershell",
-                "Copy-Item",
-                "-Path",
-                joinedPaths,
-                "-Destination",
-                "'" ~ rootStaticDirectoryPath ~ "'",
-                "-Recurse",
-                "-Force"
-            ];
-            logDebug("Copy command: %s", command);
-            auto copyExecution = execute(command);
-        }
-        else
-        {
-            auto command = "rsync -a " ~ joinedPaths ~ " '" ~ rootStaticDirectoryPath ~ "'";
-            logDebug("Copy command: %s", command);
-            auto copyExecution = executeShell(command);
-        }
-
-        if (copyExecution.status != 0)
-        {
-            logFatal("Static file collecting failed:\n%s", copyExecution.output);
-            return 1;
-        }
-
-        logInfo("Collected static files.");
-        return 0;
     }
 }
 

@@ -36,6 +36,7 @@ subPackage {
     description "Potcake web framework higher-level web app components."
 
     dependency "potcake:http" version="*"
+    dependency "unit-threaded:assertions" version="~>2.1.2"
     dependency "urllibparse" version="~>0.1.0"
 
     targetType "library"
