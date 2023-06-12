@@ -5,7 +5,7 @@ import potcake.http.router : Router;
 import std.functional : memoize;
 import std.variant : Variant;
 
-public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
+public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse, render;
 public import potcake.http.router : MiddlewareFunction, MiddlewareDelegate, pathConverter, PathConverterSpec;
 
 alias SettingsDelegate = Variant delegate(string setting);
@@ -38,6 +38,23 @@ string reverse(T...)(string routeName, T pathArguments)
 {
     return getInitializedApp().reverse(routeName, pathArguments);
 }
+
+//template initRender(string[] templateDirectories)
+//{
+//
+//}
+//
+//template render(string templateName, aliases...)
+//{
+//    void render(Response)(Response res)
+//    {
+//        import diet.html : compileHTMLDietFile;
+//        import vibe.stream.wrapper : streamOutputRange;
+//
+//        auto outRange = streamOutputRange(res.bodyWriter);
+//        outRange.compileHTMLDietFile!(templateName, aliases);
+//    }
+//}
 
 static immutable char urlSeparator = '/';
 

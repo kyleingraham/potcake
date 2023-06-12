@@ -12,6 +12,7 @@ int main(string[] args)
     auto webApp = new WebApp(settings);
     webApp
     .addRoute("/", &handler)
+    .addRoute("/diet/<int:num>", &dietHandler)
     .serveStaticFiles();
 
     return webApp.run(args);
@@ -35,4 +36,9 @@ void handler(HTTPServerRequest req, HTTPServerResponse res)
         <h2>...and this text should be green.</h2>
     </body>
 </html>`, HTTPStatus.ok, "text/html; charset=utf-8");
+}
+
+void dietHandler(HTTPServerRequest req, HTTPServerResponse res, int num)
+{
+    res.render!("templates/test.dt", num);
 }
