@@ -7,12 +7,16 @@ int main(string[] args)
     auto settings = new WebAppSettings;
     settings.staticDirectories = ["static_a", "static_b"];
     settings.rootStaticDirectory = "staticroot";
-    settings.staticRoutePath = "/static";
+    settings.staticRoutePath = "/static/";
+
+    auto routes = [
+        route("/", &handler),
+        route("/diet/<int:num>/", &dietHandler),
+    ];
 
     auto webApp = new WebApp(settings);
     webApp
-    .addRoute("/", &handler)
-    .addRoute("/diet/<int:num>/", &dietHandler)
+    .addRoutes(routes)
     .serveStaticFiles();
 
     return webApp.run(args); // For detection of the --collectstatic flag.

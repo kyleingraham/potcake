@@ -4,10 +4,14 @@ import potcake.web;
 
 int main()
 {
-    auto webApp = new WebApp;
+    auto settings = new WebAppSettings;
+    settings.rootStaticDirectory = "static";
+    settings.staticRoutePath = "/static/";
+
+    auto webApp = new WebApp(settings);
     webApp
     .addRoute("/", &handler)
-    .serveStaticFiles("/static/", "static/");
+    .serveStaticFiles();
 
     return webApp.run();
 }
@@ -22,7 +26,7 @@ void handler(HTTPServerRequest req, HTTPServerResponse res)
     <head>
         <meta charset="utf-8" />
         <title>Static Files Example</title>
-        <link rel="stylesheet" href="/static/css/styles.css" />
+        <link rel="stylesheet" href="` ~ staticPath("css/styles.css") ~ `" />
     </head>
     <body>
         <h1>This text should be red.</h1>

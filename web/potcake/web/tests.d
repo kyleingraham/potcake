@@ -173,10 +173,15 @@ unittest
         scope(exit) staticFile.remove;
         staticFile.write("PASS");
 
-        auto app = new WebApp;
-        app.serveStaticFiles("/static", staticFile.dirName.absolutePath);
-        app.addRoute("/stopapp/", &stopApp);
-        app.run();
+        auto settings = new WebAppSettings;
+        settings.rootStaticDirectory = staticFile.dirName.absolutePath;
+        settings.staticRoutePath = "/static/";
+
+        auto app = new WebApp(settings);
+        app
+        .addRoute("/stopapp/", &stopApp)
+        .serveStaticFiles()
+        .run();
     }
 
     void testApp()

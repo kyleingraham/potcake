@@ -46,7 +46,7 @@ string staticPathImpl(string relativePath)
     import urllibparse : urlJoin;
 
     auto basePath = (() @trusted => getSetting("staticRoutePath").get!string)();
-    assert(0 < basePath.length, "The 'rootStaticDirectory' setting must be set to generate static paths.");
+    assert(0 < basePath.length, "The 'staticRoutePath' setting must be set to generate static paths.");
 
     if (basePath[$-1] != urlSeparator)
         basePath ~= urlSeparator;
@@ -93,6 +93,12 @@ final class WebApp
         router = new Router;
         router.addPathConverters(pathConverters);
 
+        initializeSettings(webAppSettings);
+    }
+
+    private void initializeSettings(T)(T webAppSettings)
+    if (is(T : WebAppSettings))
+    {
         getSetting = (setting) {
             Variant fetchedSetting;
 
@@ -155,15 +161,14 @@ final class WebApp
 
         enforce!ImproperlyConfigured(
             0 < webAppSettings.rootStaticDirectory.length &&
-            0 < webAppSettings.staticDirectories.length &&
             0 < webAppSettings.staticRoutePath.length,
-            "The 'rootStaticDirectory', 'staticDirectories', and 'staticRoutePath' settings must be set to serve collected static files."
+            "The 'rootStaticDirectory', 'staticRoutePath' settings must be set to serve static files."
         );
 
         return serveStaticFiles(webAppSettings.staticRoutePath, webAppSettings.rootStaticDirectory);
     }
 
-    WebApp serveStaticFiles(string routePath, string directoryPath)
+    private WebApp serveStaticFiles(string routePath, string directoryPath)
     {
         import std.string : stripRight;
         import vibe.http.fileserver : HTTPFileServerSettings, serveStaticFiles;
