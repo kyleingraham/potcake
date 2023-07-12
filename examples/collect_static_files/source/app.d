@@ -12,10 +12,10 @@ int main(string[] args)
     auto webApp = new WebApp(settings);
     webApp
     .addRoute("/", &handler)
-    .addRoute("/diet/<int:num>", &dietHandler)
+    .addRoute("/diet/<int:num>/", &dietHandler)
     .serveStaticFiles();
 
-    return webApp.run(args);
+    return webApp.run(args); // For detection of the --collectstatic flag.
 }
 
 void handler(HTTPServerRequest req, HTTPServerResponse res)

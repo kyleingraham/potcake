@@ -2,7 +2,7 @@ module potcake.http.tests;
 
 import potcake.http.router;
 
-// This converter must be placed in a module separate to TypedURLConverter to ensure no regression in being able to use
+// This converter must be placed in a module separate to Router to ensure no regression in being able to use
 // converters defined outside of the router's module.
 package struct TestStringConverter
 {
@@ -86,7 +86,7 @@ unittest
     auto router = new Router;
     router.get("/make/<string:model>/model/<int:make>/", &a);
     router.get("/<int:value>/", &b);
-    router.get("/<int:value>", &c);
+    router.get("/<string:value>", &c);
     router.get("/no/path/converters/", &d);
 
     auto res = createTestHTTPServerResponse();
@@ -99,9 +99,11 @@ unittest
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1/")), res);
     assert(result == "AB", "Did not match trailing '/'");
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1")), res);
-    assert(result == "ABC", "Did not match without trailing '/'");
+    assert(result == "ABB", "Did not match without optional trailing '/'");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/test")), res);
+    assert(result == "ABBC", "Did not match without trailing '/'");
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/no/path/converters/")), res);
-    assert(result == "ABCD", "Did not match when no path converters present");
+    assert(result == "ABBCD", "Did not match when no path converters present");
 }
 
 unittest
@@ -236,6 +238,9 @@ unittest
 unittest
 {
     // StringConverter & URLPathConverter
+    // 'path' (URLPathConverter) matches any character but we expect the 'string' (StringConverter) route to be checked
+    // first. 'string' should exlude '/' characters causing our first test to fall through to the 'path' route.
+    // The next test should not fall through and be caught by the 'string' route.
     import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
     import vibe.inet.url : URL;
 
@@ -250,7 +255,7 @@ unittest
     {
         import std.format : format;
 
-        string expectedValue = "some/valid/path";
+        string expectedValue = "some/valid/path/";
         assert(value == expectedValue, format("Path not parsed correctly. Expected '%s' but got '%s'.", expectedValue, value));
         result ~= "A";
     }

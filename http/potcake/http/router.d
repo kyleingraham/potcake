@@ -329,7 +329,11 @@ alias RouteName = string;
 
                 static foreach (i; 0 .. tailArgs.length)
                 {
-                    tailArgs[i] = (() @trusted => converterMap[parsedPath.pathCaptureGroups[i].converterPathName].toDDelegate(req.params.get(pathCaptureGroups[i].pathParameter)).get!(Parameters!(handler)[i + 2]))();
+                    tailArgs[i] = (() @trusted =>
+                        converterMap[parsedPath.pathCaptureGroups[i].converterPathName]     // load path converter
+                        .toDDelegate(req.params.get(pathCaptureGroups[i].pathParameter))    // convert request param
+                        .get!(Parameters!(handler)[i + 2])                                  // convert Variant to type
+                    )();
                 }
 
                 handler(req, res, tailArgs.expand);
@@ -460,14 +464,31 @@ Path:
         return walkForGroups(p);
     }
 
+    /**
+    * Convert a path containing named converter captures to one with named regex captures.
+    *
+    * The regex paths produced here are used in:
+    *   - Request route matching
+    *   - Request parameter extraction
+    *
+    * Examples:
+    * ---
+    * // Returns "^\\/hello\\/(?P<name>[^/]+)\\/*$"
+    * getRegexPath("/hello/<string:name>/", [PathCaptureGroup("string", "name", "<string:name>")], true);
+    * ---
+    */
     private string getRegexPath(string path, PathCaptureGroup[] captureGroups, bool isEndpoint=false)
     {
-        // Django converts 'foo/<int:pk>' to '^foo\\/(?P<pk>[0-9]+)'
+        import std.algorithm.searching : endsWith;
         import std.array : replace, replaceFirst;
 
         string result = ("^" ~ path[]).replace("/", r"\/");
-        if (isEndpoint)
+        if (isEndpoint) {
+            if (result.endsWith(r"\/"))
+                result = result ~ "*"; // If the route ends in a '/' we make it optional.
+
             result = result ~ "$";
+        }
 
         foreach (group; captureGroups)
         {

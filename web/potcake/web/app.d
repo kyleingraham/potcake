@@ -39,23 +39,6 @@ string reverse(T...)(string routeName, T pathArguments)
     return getInitializedApp().reverse(routeName, pathArguments);
 }
 
-//template initRender(string[] templateDirectories)
-//{
-//
-//}
-//
-//template render(string templateName, aliases...)
-//{
-//    void render(Response)(Response res)
-//    {
-//        import diet.html : compileHTMLDietFile;
-//        import vibe.stream.wrapper : streamOutputRange;
-//
-//        auto outRange = streamOutputRange(res.bodyWriter);
-//        outRange.compileHTMLDietFile!(templateName, aliases);
-//    }
-//}
-
 static immutable char urlSeparator = '/';
 
 string staticPathImpl(string relativePath)
@@ -153,6 +136,14 @@ final class WebApp
         return this;
     }
 
+    WebApp addRoutes(RouteConfig routeConfig)
+    {
+        foreach(addRouteTo; routeConfig)
+            addRouteTo(this);
+
+        return this;
+    }
+
     string reverse(T...)(string routeName, T pathArguments) const
     {
         return router.reverse(routeName, pathArguments);
@@ -210,14 +201,6 @@ final class WebApp
         return runApplication();
     }
 
-    private WebApp addRoutes(RouteConfig routeConfig)
-    {
-        foreach (routeAdder; routeConfig)
-            routeAdder(this);
-
-        return this;
-    }
-
     private int handleArgs(string[] args)
     {
         import potcake.web.commands : collectStaticFilesCommand;
@@ -235,8 +218,3 @@ final class WebApp
         }
     }
 }
-
-// TODO: Add library goals to README
-// Sane and safe defaults
-// Easy to use how you want or with our opinionated structure
-// Useful components to prevent re-inventing the wheel

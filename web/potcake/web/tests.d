@@ -63,6 +63,33 @@ unittest
 
 unittest
 {
+    // Do we add routes via 'addRoutes' as expected?
+    import std.net.curl : get;
+    import unit_threaded.assertions : shouldEqual;
+
+    void runApp()
+    {
+        auto app = new WebApp;
+        auto routes = [
+            route("/hello/1/<string:name>/", &nameHandler, "name-1"),
+            route("/hello/2/<string:name>/", &nameHandler, "name-2"),
+        ];
+        app.addRoutes(routes);
+        app.run();
+    }
+
+    void testApp()
+    {
+        string expectedName = "potcake";
+        auto content = get("http://127.0.0.1:9000/hello/1/" ~ expectedName ~ "/");
+        content.shouldEqual(expectedName, "Web app did not respond with exptected content.");
+    }
+
+    runTest(&runApp, &testApp);
+}
+
+unittest
+{
     // Do we add path converters via 'addPathConverters' as expected?
     import std.net.curl : get;
     import unit_threaded.assertions : shouldEqual;
