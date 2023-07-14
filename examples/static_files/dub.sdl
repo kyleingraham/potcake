@@ -1,0 +1,4 @@
+name "static-files-example"
+description "Demonstrates a web app that serves static files."
+
+dependency "potcake:web" path="../../"

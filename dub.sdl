@@ -5,21 +5,22 @@ copyright "Copyright © 2022, Kyle Ingraham"
 license "MIT"
 
 dependency "potcake:http" version="*"
+dependency "potcake:web" version="*"
 
 targetType "library"
 targetName "potcake"
 
-sourcePaths "."
-importPaths "."
+sourcePaths "http" "web"
+importPaths "http" "web"
 
 subPackage {
     name "http"
     description "Potcake web framework lower-level http components. Includes its vibe.d router."
 
     dependency "pegged" version="~>0.4.6"
-    dependency "vibe-core" version="~>1.22.4"
-    dependency "vibe-d:http" version="~>0.9.5"
-    dependency "vibe-d:inet" version="~>0.9.5"
+    dependency "vibe-core" version="~>2.2.0"
+    dependency "vibe-d:http" version="~>0.9.6"
+    dependency "vibe-d:inet" version="~>0.9.6"
 
     targetType "library"
 
@@ -28,4 +29,21 @@ subPackage {
 
     lflags "-L/opt/local/lib/openssl-3" platform="osx" // Location used by MacPorts for openssl3
     lflags "-L/opt/local/lib/openssl-1.1" platform="osx" // Location used by MacPorts for openssl11
+}
+
+subPackage {
+    name "web"
+    description "Potcake web framework higher-level web app components."
+
+    dependency "diet-ng" version="~>1.8.1"
+    dependency "potcake:http" version="*"
+    dependency "unit-threaded:assertions" version="~>2.1.6"
+    dependency "urllibparse" version="~>0.1.0"
+
+    targetType "library"
+
+    sourcePaths "web"
+    importPaths "web"
+
+    dflags "-J \".\"" // Allows the user to specify template locations in code
 }

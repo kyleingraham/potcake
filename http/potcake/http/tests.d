@@ -2,8 +2,8 @@ module potcake.http.tests;
 
 import potcake.http.router;
 
-// This converter must be placed in a module separate to TypedURLConverter to ensure no regression in being able to use
-// converters defined outside of the router's.
+// This converter must be placed in a module separate to Router to ensure no regression in being able to use
+// converters defined outside of the router's module.
 package struct TestStringConverter
 {
     enum regex = "[^/]+";
@@ -11,6 +11,11 @@ package struct TestStringConverter
     string toD(const string value) @safe
     {
         return "PASS";
+    }
+
+    string toPath(const string value) @safe
+    {
+        return value;
     }
 }
 
@@ -25,11 +30,29 @@ unittest
         assert(name == "PASS", "Used built-in 'string' path converter instead of user-supplied converter");
     }
 
-    auto router = new Router!([bindPathConverter!(TestStringConverter, "string")]);
-    router.get!"/hello/<string:name>/"(&testHandler);
+    auto router = new Router;
+    router.addPathConverters([pathConverter("string", TestStringConverter())]);
+    router.get("/hello/<string:name>/", &testHandler);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/FAIL/")), res);
+}
+
+unittest
+{
+    // Do we warn about unregistered path converters?
+    void testHandler(HTTPServerRequest req, HTTPServerResponse res, string name) { }
+
+    auto router = new Router;
+
+    try {
+        router.get("/hello/<notregistered:name>/", &testHandler);
+    } catch (ImproperlyConfigured e) {
+        assert(e.msg == "No path converter registered for 'notregistered'." );
+        return ;
+    }
+
+    assert(false, "We did not raise an exception for an unregistered path converter");
 }
 
 unittest
@@ -60,11 +83,11 @@ unittest
         result ~= "D";
     }
 
-    auto router = new Router!();
-    router.get!"/make/<string:model>/model/<int:make>/"(&a);
-    router.get!"/<int:value>/"(&b);
-    router.get!"/<int:value>"(&c);
-    router.get!"/no/path/converters/"(&d);
+    auto router = new Router;
+    router.get("/make/<string:model>/model/<int:make>/", &a);
+    router.get("/<int:value>/", &b);
+    router.get("/<string:value>", &c);
+    router.get("/no/path/converters/", &d);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/")), res);
@@ -76,14 +99,16 @@ unittest
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1/")), res);
     assert(result == "AB", "Did not match trailing '/'");
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1")), res);
-    assert(result == "ABC", "Did not match without trailing '/'");
+    assert(result == "ABB", "Did not match without optional trailing '/'");
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/test")), res);
+    assert(result == "ABBC", "Did not match without trailing '/'");
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/no/path/converters/")), res);
-    assert(result == "ABCD", "Did not match when no path converters present");
+    assert(result == "ABBCD", "Did not match when no path converters present");
 }
 
 unittest
 {
-    // Do we set 'string' as the default path converter when non is specified?
+    // Do we set 'string' as the default path converter when none is specified?
     import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
     import vibe.inet.url : URL;
 
@@ -94,8 +119,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/make/<string:model>/model/<make>/"(&a);
+    auto router = new Router;
+    router.get("/make/<string:model>/model/<make>/", &a);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/make/porsche/model/911/")), res);
@@ -121,13 +146,23 @@ unittest
         assert(id == 123456, "Did pass path value to handler");
     }
 
-    auto router = new Router!();
-    router.get!"/a/<int:id>/"(&a);
-    router.get!"/b/<int:id>/"(&b);
+    void c(HTTPServerRequest req, HTTPServerResponse res, int id, string value)
+    {
+        assert(req.params["id"] == "123456", "Did not save path value to request params");
+        assert(id == 123456, "Did pass path value to handler");
+        assert(req.params["value"] == "value", "Did not save path value to request params");
+        assert(value == "value", "Did pass path value to handler");
+    }
+
+    auto router = new Router;
+    router.get("/a/<int:id>/", &a);
+    router.get("/b/<int:id>/", &b);
+    router.get("/c/<int:id>/<string:value>/", &c);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/a/123456/")), res);
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/b/123456/")), res);
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/c/123456/value/")), res);
 }
 
 unittest
@@ -143,8 +178,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/<int:value>/"(&a);
+    auto router = new Router;
+    router.get("/<int:value>/", &a);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1/")), res);
@@ -166,8 +201,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/<slug:value>/"(&a);
+    auto router = new Router;
+    router.get("/<slug:value>/", &a);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/slug-string/")), res);
@@ -190,8 +225,8 @@ unittest
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/<uuid:value>/"(&a);
+    auto router = new Router;
+    router.get("/<uuid:value>/", &a);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/1234abcd-1234-abcd-1234-abcd1234abcd/")), res);
@@ -203,6 +238,9 @@ unittest
 unittest
 {
     // StringConverter & URLPathConverter
+    // 'path' (URLPathConverter) matches any character but we expect the 'string' (StringConverter) route to be checked
+    // first. 'string' should exlude '/' characters causing our first test to fall through to the 'path' route.
+    // The next test should not fall through and be caught by the 'string' route.
     import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
     import vibe.inet.url : URL;
 
@@ -217,14 +255,14 @@ unittest
     {
         import std.format : format;
 
-        string expectedValue = "some/valid/path";
+        string expectedValue = "some/valid/path/";
         assert(value == expectedValue, format("Path not parsed correctly. Expected '%s' but got '%s'.", expectedValue, value));
         result ~= "A";
     }
 
-    auto router = new Router!();
-    router.get!"/<string:value>/"(&a);
-    router.get!"/<path:value>/"(&b);
+    auto router = new Router;
+    router.get("/<string:value>/", &a);
+    router.get("/<path:value>/", &b);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/some/valid/path/")), res);
@@ -278,9 +316,9 @@ unittest
     }
 
 
-    auto router = new Router!();
-    router.get!"/<string:value>/"(&a);
-    router.get!"/<string:value>/"(&b);
+    auto router = new Router;
+    router.get("/<string:value>/", &a);
+    router.get("/<string:value>/", &b);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/value/")), res);
@@ -324,8 +362,8 @@ unittest
         result ~= "C";
     }
 
-    auto router = new Router!();
-    router.get!"/hello/"(&handlerA);
+    auto router = new Router;
+    router.get("/hello/", &handlerA);
     router.addMiddleware(&middlewareA);
     router.addMiddleware(&middlewareB);
 
@@ -370,12 +408,128 @@ unittest
         result ~= "X";
     }
 
-    auto router = new Router!();
-    router.get!"/hello/"(&handlerA);
+    auto router = new Router;
+    router.get("/hello/", &handlerA);
     router.addMiddleware(&middlewareA);
     router.addMiddleware(&middlewareB);
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/")), res);
     assert(result == "ABCD", "Did not short-circuit path through middleware to handler");
+}
+
+unittest
+{
+    // Do we create handlers for all HTTPMethod members when using Router.any?
+    import std.traits : EnumMembers;
+    import vibe.http.common : HTTPMethod;
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "A";
+    }
+
+    auto router = new Router;
+    router.any("/hello/", &a);
+
+    auto res = createTestHTTPServerResponse();
+
+    auto allMethods = [EnumMembers!HTTPMethod];
+    foreach (immutable method; allMethods)
+        router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/"), method), res);
+
+    assert(result.length == allMethods.length, "Did not create handlers for all HTTPMethod members");
+}
+
+unittest
+{
+    // Do we reverse routes given valid route names?
+    import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
+    import vibe.inet.url : URL;
+
+    string result;
+
+    void a(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "A";
+    }
+
+    void b(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        result ~= "B";
+    }
+
+    auto router = new Router;
+    router.get("/<string:value>/<int:value>/", &a, "a");
+    router.get("/<string:value>/", &b, "b");
+
+    auto reverseMultipleParams = router.reverse("a", "somestring", 8);
+    auto reverseOneParam = router.reverse("b", "somestring");
+    auto reverseParamWithSpace = router.reverse("b", "some string");
+
+    assert(reverseMultipleParams == "/somestring/8/", "Incorrect reverse for multiple arguments");
+    assert(reverseOneParam == "/somestring/", "Incorrect reverse for single argument");
+    assert(reverseParamWithSpace == "/some%20string/", "Reversed path not URL-encoded");
+
+    auto res = createTestHTTPServerResponse();
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost" ~ reverseMultipleParams)), res);
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost" ~ reverseOneParam)), res);
+    router.handleRequest(createTestHTTPServerRequest(URL("http://localhost" ~ reverseParamWithSpace)), res);
+    assert(result == "ABB", "Reversed paths could not be used to access route");
+}
+
+unittest {
+    auto routeName = "route that doesn't exist";
+
+    try {
+        auto router = new Router;
+        router.reverse(routeName);
+    } catch (NoReverseMatch e) {
+        assert(e.msg == "No route registered for name '" ~ routeName ~ "'", "Unexpected reverse error message");
+        return ;
+    }
+
+    assert(false, "NoReverseMatch not thrown for route name with no registered route");
+}
+
+unittest {
+    auto routeName = "route";
+
+    try {
+        auto router = new Router;
+        router.get("/hello/", delegate void(HTTPServerRequest req, HTTPServerResponse res) {}, routeName);
+        router.reverse(routeName, "extra argument");
+    } catch (NoReverseMatch e) {
+        assert(
+            e.msg == "Count of path arguments given doesn't match count for those registered",
+            "Unexpected reverse error message"
+        );
+        return ;
+    }
+
+    assert(false, "NoReverseMatch not thrown for mismatched argument counts");
+}
+
+unittest {
+    import std.format : format;
+
+    auto routeName = "route";
+
+    try {
+        auto router = new Router;
+        router.get("/hello/<int:num>/", delegate void(HTTPServerRequest req, HTTPServerResponse res) {}, routeName);
+        router.reverse(routeName, 1451412341412414);
+    } catch (NoReverseMatch e) {
+        assert(
+            e.msg == format("Reverse not found for '%s' with '%s'", routeName, 1451412341412414),
+            "Unexpected reverse error message"
+        );
+        return ;
+    }
+
+    assert(false, "NoReverseMatch not thrown for error in path argument conversion");
 }

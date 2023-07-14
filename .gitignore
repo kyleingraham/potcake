@@ -1,3 +1,4 @@
+# Development artifacts
 .dub
 dub.selections.json
 docs.json
@@ -8,11 +9,21 @@ libpotcake*.dylib
 libpotcake*.dll
 libpotcake*.a
 libpotcake*.lib
+potcake*.lib
 potcake-test-*
 *.exe
 *.o
 *.obj
 *.lst
 *.pdb
+*.dll
 
+# IDE project files
 .idea
+*.iml
+
+# Project examples
+*-example
+
+# OS files
+.DS_Store
