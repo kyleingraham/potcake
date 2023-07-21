@@ -4,6 +4,7 @@ module potcake.web.app;
 import potcake.http.router : Router;
 import std.functional : memoize;
 import std.variant : Variant;
+import vibe.http.server : HTTPServerSettings;
 
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse, render;
 public import potcake.http.router : MiddlewareFunction, MiddlewareDelegate, pathConverter, PathConverterSpec;
@@ -17,12 +18,18 @@ alias RouteConfig = RouteAdder[];
 
 class WebAppSettings
 {
-    string[] allowedHosts = ["localhost", "127.0.0.1"];
-    ushort port = 9000;
     RouteConfig rootRouteConfig = [];
     string[] staticDirectories = [];
     string rootStaticDirectory;
     string staticRoutePath;
+    HTTPServerSettings vibed;
+
+    this()
+    {
+        vibed = new HTTPServerSettings;
+        vibed.bindAddresses = ["localhost", "127.0.0.1"];
+        vibed.port = 9000;
+    }
 }
 
 RouteAdder route(Handler)(string path, Handler handler, string name=null)
@@ -196,7 +203,7 @@ final class WebApp
         if (returnCode != -1)
             return returnCode;
 
-        auto listener = listenHTTP(vibeSettings, router);
+        auto listener = listenHTTP(webAppSettings.vibed, router);
 
         scope (exit)
         {
