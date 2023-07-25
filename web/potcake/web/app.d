@@ -3,9 +3,12 @@ module potcake.web.app;
 
 import potcake.http.router : Router;
 import std.functional : memoize;
+import std.process : processEnv = environment;
 import std.variant : Variant;
+import vibe.core.log : Logger;
 import vibe.http.server : HTTPServerSettings;
 
+public import vibe.core.log : FileLogger, LogLevel;
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse, render;
 public import potcake.http.router : MiddlewareFunction, MiddlewareDelegate, pathConverter, PathConverterSpec;
 
@@ -16,20 +19,123 @@ SettingsDelegate getSetting;
 alias RouteAdder = void delegate(WebApp webApp);
 alias RouteConfig = RouteAdder[];
 
+/**
+ * Core settings for Potcake web apps. Provides reasonable defaults.
+ *
+ * Subclass to make custom settings available to your app.
+ */
 class WebAppSettings
 {
+    /**
+     * The routes that your web app makes available.
+     *
+     * Eliminates the need to add routes manually. Intended to be given an array of calls to [route].
+     *
+     * Example:
+     * ---
+     * auto settings = new WebAppSettings();
+     * settings.rootRouteConfig = [
+     *     route("/", &index),
+     *     route("/hello/", &hello),
+     * ];
+     * ---
+     */
     RouteConfig rootRouteConfig = [];
+
+    /// Directories containing static files for collection via the '--collectstatic' utility.
     string[] staticDirectories = [];
+
+    /**
+     * Directory into which to collect static files and optional serve them.
+     *
+     * Relied on by [WebApp.serveStaticFiles()].
+     */
     string rootStaticDirectory;
+
+    /**
+     * The route prefix at which to serve static files e.g. "/static/".
+     *
+     * Relied on by [WebApp.serveStaticFiles()].
+     */
     string staticRoutePath;
+
+    /// Direct access to the settings controlling the underlying vibe.d server.
     HTTPServerSettings vibed;
 
-    this()
+    /// Called to set vibe.d-related defaults.
+    void initializeVibedSettings()
     {
         vibed = new HTTPServerSettings;
         vibed.bindAddresses = ["localhost", "127.0.0.1"];
         vibed.port = 9000;
     }
+
+    /**
+     * Logging configuration for your web app keyed on environment.
+     *
+     * This setting allows for:
+     *   - varying logging between development and production.
+     *   - varying log levels and formats between loggers in an environment.
+     *
+     * vibe.d provides a well-configured console logger. To use it supply [VibedStdoutLogger] via [LoggerSetting].
+     *
+     * See [initializeLoggingSettings] for a usage example.
+     */
+    LoggerSetting[][string] logging;
+
+    /// Called to set logging-related defaults.
+    void initializeLoggingSettings()
+    {
+        logging = [
+            WebAppEnvironment.development: [
+                LoggerSetting(LogLevel.info, new VibedStdoutLogger(), FileLogger.Format.threadTime),
+            ],
+            WebAppEnvironment.production: [],
+        ];
+    }
+
+    /// Controls whether vibe.d server access logs should be displayed in the 'development' environment for convenience.
+    bool logAccessInDevelopment = true;
+
+    /**
+     * Signals the evironment that your app is running in.
+     *
+     * Can be set with the POTCAKE_ENVIRONMENT environment variable.
+     *
+     * Potcake is pre-configured for WebAppEnvironment values but any string can be used.
+     */
+    string environment = WebAppEnvironment.development;
+
+    /// Sets environment via the process environment.
+    void initializeEnvironment()
+    {
+        environment = processEnv.get("POTCAKE_ENVIRONMENT", WebAppEnvironment.development);
+    }
+
+    this()
+    {
+        initializeEnvironment();
+        initializeVibedSettings();
+        initializeLoggingSettings();
+    }
+}
+
+/// Environment designators that Potcake supports out of the box. Strings to allow end-user flexibility.
+enum WebAppEnvironment : string
+{
+    development = "development",
+    production = "production",
+}
+
+/// A logger for signifying the desire to use vibe.d's built-in console logger.
+final class VibedStdoutLogger : Logger {}
+
+/// Supply to [WebAppSettings.logging] to add a logger for an environment.
+struct LoggerSetting
+{
+    LogLevel logLevel;
+    Logger logger;
+    FileLogger.Format format = FileLogger.Format.plain; /// Only read from for FileLogger loggers.
 }
 
 RouteAdder route(Handler)(string path, Handler handler, string name=null)
@@ -100,10 +206,12 @@ final class WebApp
         router = new Router;
         router.addPathConverters(pathConverters);
 
-        initializeSettings(webAppSettings);
+        initializeGetSetting(webAppSettings);
+
+        initializeLogging();
     }
 
-    private void initializeSettings(T)(T webAppSettings)
+    private void initializeGetSetting(T)(T webAppSettings)
     if (is(T : WebAppSettings))
     {
         getSetting = (setting) {
@@ -129,6 +237,37 @@ final class WebApp
         };
     }
 
+    private void initializeLogging()
+    {
+        import vibe.core.log : setLogLevel, registerLogger, setLogFormat;
+
+        setLogLevel(LogLevel.none);
+
+        auto loggerSettings = webAppSettings.logging[webAppSettings.environment];
+
+        foreach (loggerSetting; loggerSettings)
+        {
+            if (typeid(loggerSetting.logger) == typeid(VibedStdoutLogger))
+            {
+                setLogLevel(loggerSetting.logLevel);
+                setLogFormat(loggerSetting.format, loggerSetting.format);
+                continue;
+            }
+
+            if (auto logger = cast(FileLogger) loggerSetting.logger)
+            {
+                logger.format = loggerSetting.format;
+            }
+
+            loggerSetting.logger.minLevel = loggerSetting.logLevel;
+            auto register = (() @trusted => registerLogger(cast(shared)loggerSetting.logger));
+            register();
+        }
+
+        if (webAppSettings.environment == WebAppEnvironment.development && webAppSettings.logAccessInDevelopment)
+            webAppSettings.vibed.accessLogToConsole = true;
+    }
+
     WebApp addMiddleware(MiddlewareFunction middleware)
     {
         import std.functional : toDelegate;
@@ -151,7 +290,7 @@ final class WebApp
 
     WebApp addRoutes(RouteConfig routeConfig)
     {
-        foreach(addRouteTo; routeConfig)
+        foreach (addRouteTo; routeConfig)
             addRouteTo(this);
 
         return this;
@@ -190,6 +329,7 @@ final class WebApp
     {
         import vibe.http.server : listenHTTP;
         import vibe.core.core : runApplication;
+        import vibe.core.log : logInfo;
 
         vibeSettings = new HTTPServerSettings;
         vibeSettings.bindAddresses = webAppSettings.allowedHosts;
@@ -209,6 +349,8 @@ final class WebApp
         {
             listener.stopListening();
         }
+
+        logInfo("Running in '%s' environment.", webAppSettings.environment);
 
         return runApplication();
     }
