@@ -51,9 +51,9 @@ class WebAppSettings
     string[] staticDirectories = [];
 
     /**
-     * Directory into which to collect static files and optional serve them.
+     * Directory from which static files are served and also where they are collected into.
      *
-     * Relied on by [WebApp.serveStaticFiles()].
+     * Static files are collected here by the '--collectstatic' utility. Relied on by [WebApp.serveStaticFiles()].
      */
     string rootStaticDirectory;
 
@@ -99,7 +99,7 @@ class WebAppSettings
         ];
     }
 
-    /// Controls whether vibe.d server access logs should be displayed in the 'development' environment for convenience.
+    /// Controls whether vibe.d server access logs should be displayed in the 'development' environment.
     bool logAccessInDevelopment = true;
 
     /**
@@ -107,11 +107,11 @@ class WebAppSettings
      *
      * Can be set with the POTCAKE_ENVIRONMENT environment variable.
      *
-     * Potcake is pre-configured for WebAppEnvironment values but any string can be used.
+     * Potcake is pre-configured for [WebAppEnvironment] values but any string can be used.
      */
     string environment = WebAppEnvironment.development;
 
-    /// Sets environment via the process environment.
+    /// Sets the web app environment via the process environment.
     void initializeEnvironment()
     {
         environment = processEnv.get("POTCAKE_ENVIRONMENT", WebAppEnvironment.development);
@@ -125,14 +125,14 @@ class WebAppSettings
     }
 }
 
-/// Environment designators that Potcake supports out of the box. Strings to allow end-user flexibility.
+/// Environment designators that Potcake supports out of the box.
 enum WebAppEnvironment : string
 {
     development = "development",
     production = "production",
 }
 
-/// A logger for signifying the desire to use vibe.d's built-in console logger.
+/// A logger that signals Potcake to use vibe.d's built-in console logger.
 final class VibedStdoutLogger : Logger {}
 
 /// Supply to [WebAppSettings.logging] to add a logger for an environment.
@@ -140,7 +140,7 @@ struct LoggerSetting
 {
     LogLevel logLevel;
     Logger logger;
-    FileLogger.Format format = FileLogger.Format.plain; /// Only read from for FileLogger loggers.
+    FileLogger.Format format = FileLogger.Format.plain; /// Only read for FileLogger loggers.
 }
 
 RouteAdder route(Handler)(string path, Handler handler, string name=null)
