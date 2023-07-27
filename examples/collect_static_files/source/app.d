@@ -44,5 +44,5 @@ void handler(HTTPServerRequest req, HTTPServerResponse res)
 
 void dietHandler(HTTPServerRequest req, HTTPServerResponse res, int num)
 {
-    res.render!("templates/test.dt", num);
+    res.render!("test.dt", num);
 }

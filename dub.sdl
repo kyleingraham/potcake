@@ -44,6 +44,4 @@ subPackage {
 
     sourcePaths "web"
     importPaths "web"
-
-    dflags "-J \".\"" // Allows the user to specify template locations in code
 }
