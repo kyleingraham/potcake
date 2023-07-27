@@ -4,22 +4,22 @@ import potcake.web;
 
 int main(string[] args)
 {
-    auto settings = new WebAppSettings;
-    settings.staticDirectories = ["static_a", "static_b"];
-    settings.rootStaticDirectory = "staticroot";
-    settings.staticRoutePath = "/static/";
-
     auto routes = [
         route("/", &handler),
         route("/diet/<int:num>/", &dietHandler),
     ];
 
-    auto webApp = new WebApp(settings);
-    webApp
-    .addRoutes(routes)
-    .serveStaticFiles();
+    auto settings = new WebAppSettings;
+    settings.staticDirectories = ["static_a", "static_b"];
+    settings.rootStaticDirectory = "staticroot";
+    settings.staticRoutePath = "/static/";
+    settings.rootRouteConfig = routes;
 
-    return webApp.run(args); // For detection of the --collectstatic flag.
+    auto webApp = new WebApp(settings);
+
+    return webApp
+    .serveStaticFiles()
+    .run(args); // For detection of the --collectstatic flag.
 }
 
 void handler(HTTPServerRequest req, HTTPServerResponse res)
@@ -44,5 +44,5 @@ void handler(HTTPServerRequest req, HTTPServerResponse res)
 
 void dietHandler(HTTPServerRequest req, HTTPServerResponse res, int num)
 {
-    res.render!("templates/test.dt", num);
+    res.render!("test.dt", num);
 }

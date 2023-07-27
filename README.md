@@ -287,6 +287,31 @@ int main()
 }
 ```
 
+## Environment
+You can control the behaviour of your web app based on the environment it's running in via the `WebAppSettings.environment`
+setting. Potcake is configured out of the box to react to `WebAppEnvironment` values but any string value can be used.
+
+## Logging
+Potcake allows for setting logging settings keyed on environment. This allows for:
+- varying logging between development and production
+- varying log levels and formats between loggers in an environment
+
+Logging settings can be set via `WebAppSettings.logging`. Configured loggers can be any subclass of vibe.d's `Logger`.
+
+For example:
+
+```d
+auto settings = new WebAppSettings;
+settings.logging = [
+    WebAppEnvironment.development: [
+        LoggerSetting(LogLevel.info, new VibedStdoutLogger, FileLogger.Format.threadTime),
+    ],
+    WebAppEnvironment.production: [
+        LoggerSetting(LogLevel.warn, new FileLogger("application.log"), FileLogger.Format.threadTime),
+    ],
+];
+```
+
 ## FAQ
 Q - Why the name Potcake?
 
@@ -295,14 +320,15 @@ and dependable. All great aspirational qualities for a web framework.
 
 
 ## Roadmap
+- Potcake libraries that can provide templates, static files, and routes on import. This will need:
+    - [ ] DIET template loading from a library
+    - [ ] Static file collection from a library
+    - [ ] Route inclusion from a library
 - Middleware
-    - [x] Middleware system
+    - [X] Middleware system
     - Convenience middleware
-        - [x] Static files
+        - [X] Static files
+        - [ ] CSRF
         - [ ] CORS
-    - [x] Post-routing middleware
+    - [X] Post-routing middleware
     - [ ] Health-check endpoint middleware
-- Matching the API for vibe.d's `URLRouter`
-    - [ ] Set of valid handler signatures
-    - [ ] Handler registration functions e.g. `post`
-    - [ ] Per-router path prefixes
