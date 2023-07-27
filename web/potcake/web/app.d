@@ -336,10 +336,6 @@ final class WebApp
         import vibe.core.core : runApplication;
         import vibe.core.log : logInfo;
 
-        vibeSettings = new HTTPServerSettings;
-        vibeSettings.bindAddresses = webAppSettings.allowedHosts;
-        vibeSettings.port = webAppSettings.port;
-
         addRoutes(webAppSettings.rootRouteConfig);
 
         initializedApp = this;
