@@ -12,8 +12,13 @@ public import vibe.core.log : FileLogger, LogLevel;
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse, render;
 public import potcake.http.router : MiddlewareFunction, MiddlewareDelegate, pathConverter, PathConverterSpec;
 
-alias SettingsDelegate = Variant delegate(string setting);
-
+/**
+ * Fetch a setting from the currently running web app. Fetched settings are read-only.
+ *
+ * Initialized by WebApp at instantiation.
+ */
+alias SettingsDelegate = const(Variant) delegate(string setting);
+///
 SettingsDelegate getSetting;
 
 alias RouteAdder = void delegate(WebApp webApp);
@@ -158,7 +163,7 @@ string staticPathImpl(string relativePath)
 {
     import urllibparse : urlJoin;
 
-    auto basePath = (() @trusted => getSetting("staticRoutePath").get!string)();
+    auto basePath = (() @trusted => getSetting("staticRoutePath").get!string)()[];
     assert(0 < basePath.length, "The 'staticRoutePath' setting must be set to generate static paths.");
 
     if (basePath[$-1] != urlSeparator)

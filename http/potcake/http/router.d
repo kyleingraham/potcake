@@ -318,10 +318,10 @@ alias RouteName = string;
                 assert(
                     parsedPath.pathCaptureGroups.length == nonReqResParamCount,
                     format(
-                        "Path (%s) handler's non-request/response parameter count (%s) does not match path parameter count (%s)",
+                        "Path's (%s) handler's non-request/response parameter count (%s) does not match the path's parameter count (%s). ",
                         path,
+                        nonReqResParamCount,
                         parsedPath.pathCaptureGroups.length,
-                        nonReqResParamCount
                     )
                 );
 

@@ -13,7 +13,7 @@ void runTest(void delegate() runAppFunction, void delegate() testAppFunction) @t
     import unit_threaded.assertions : shouldNotThrow;
 
     spawn(runAppFunction.funcptr);
-    Thread.sleep(dur!"msecs"(500));
+    Thread.sleep(dur!"msecs"(100));
 
     shouldNotThrow!HTTPStatusException(testAppFunction());
 }
@@ -190,6 +190,251 @@ unittest
         auto content = get("http://127.0.0.1:9000/static/test-file-1.css");
         scope(exit) get("http://127.0.0.1:9000/stopapp/");
         content.shouldEqual(expectedContent, "Failed to serve from a manually-specified static file location");
+    }
+
+    runTest(&runApp, &testApp);
+}
+
+unittest
+{
+    // Do we prevent writes to web app settings?
+    import std.net.curl : get;
+    import unit_threaded.assertions : shouldEqual;
+
+    void handler(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        import vibe.http.server : HTTPServerSettings;
+        import vibe.http.status : HTTPStatus;
+
+        auto vibedSettings = (() @trusted => getSetting("vibed").get!HTTPServerSettings)();
+
+        bool writeToSettingsAllowed = true;
+        writeToSettingsAllowed = __traits(
+            compiles, vibedSettings.accessLogToConsole = !vibedSettings.accessLogToConsole
+        );
+        writeToSettingsAllowed.shouldEqual(false);
+
+        res.contentType = "text/html; charset=UTF-8";
+        res.writeBody("done", HTTPStatus.ok);
+    }
+
+    void runApp()
+    {
+        auto app = new WebApp;
+        app
+        .addRoute("/test/", &handler)
+        .addRoute("/stopapp/", &stopApp)
+        .run();
+    }
+
+    void testApp()
+    {
+        scope(exit) get("http://127.0.0.1:9000/stopapp/");
+        get("http://127.0.0.1:9000/test/");
+    }
+
+    runTest(&runApp, &testApp);
+}
+
+void getSettingHandler(HTTPServerRequest req, HTTPServerResponse res, string setting)
+{
+    import vibe.http.status : HTTPStatus;
+
+    auto environment = (() @trusted => getSetting(setting).get!string)();
+    res.contentType = "text/html; charset=UTF-8";
+    res.writeBody(environment, HTTPStatus.ok);
+}
+
+unittest
+{
+    // Do we setup default loggers for the development environment?
+    import std.conv : to;
+    import std.net.curl : get;
+    import vibe.core.log : getLoggers;
+    import unit_threaded.assertions : shouldEqual;
+
+    void runApp()
+    {
+        auto app = new WebApp;
+        app
+        .addRoute("/getsetting/<setting>/", &getSettingHandler)
+        .addRoute("/stopapp/", &stopApp)
+        .run();
+    }
+
+    void testApp()
+    {
+        scope(exit) get("http://127.0.0.1:9000/stopapp/");
+
+        auto environment = get("http://127.0.0.1:9000/getsetting/environment/");
+        environment.shouldEqual(to!string(WebAppEnvironment.development));
+
+        auto allLoggers = getLoggers();
+        allLoggers.length.shouldEqual(1);
+        auto logger = cast(FileLogger) allLoggers[0];
+        logger.minLevel.shouldEqual(LogLevel.info);
+        logger.format.shouldEqual(FileLogger.Format.threadTime);
+    }
+
+    runTest(&runApp, &testApp);
+}
+
+unittest
+{
+    // Do we start with zero logging for the production environment?
+    import std.conv : to;
+    import std.net.curl : get;
+    import vibe.core.log : getLoggers;
+    import unit_threaded.assertions : shouldEqual;
+
+    void runApp()
+    {
+        auto settings = new WebAppSettings;
+        settings.environment = WebAppEnvironment.production;
+
+        auto app = new WebApp(settings);
+        app
+        .addRoute("/getsetting/<setting>/", &getSettingHandler)
+        .addRoute("/stopapp/", &stopApp)
+        .run();
+    }
+
+    void testApp()
+    {
+        scope(exit) get("http://127.0.0.1:9000/stopapp/");
+
+        auto environment = get("http://127.0.0.1:9000/getsetting/environment/");
+        environment.shouldEqual(to!string(WebAppEnvironment.production));
+
+        auto allLoggers = getLoggers();
+        allLoggers.length.shouldEqual(1);
+
+        auto logger = cast(FileLogger) allLoggers[0];
+        logger.minLevel.shouldEqual(LogLevel.none);
+        logger.format.shouldEqual(FileLogger.Format.threadTime);
+    }
+
+    runTest(&runApp, &testApp);
+}
+
+unittest
+{
+    // Can we add loggers for environments?
+    import std.conv : to;
+    import std.net.curl : get;
+    import std.stdio : stderr, stdout;
+    import vibe.core.log : getLoggers;
+    import unit_threaded.assertions : shouldEqual;
+
+    void runApp()
+    {
+        auto settings = new WebAppSettings;
+        settings.environment = WebAppEnvironment.production;
+        settings.logging[WebAppEnvironment.production] ~= [
+            LoggerSetting(LogLevel.warn, new FileLogger(stdout, stderr), FileLogger.Format.thread),
+        ];
+
+        auto app = new WebApp(settings);
+        app
+        .addRoute("/getsetting/<setting>/", &getSettingHandler)
+        .addRoute("/stopapp/", &stopApp)
+        .run();
+    }
+
+    void testApp()
+    {
+        scope(exit) get("http://127.0.0.1:9000/stopapp/");
+
+        auto environment = get("http://127.0.0.1:9000/getsetting/environment/");
+        environment.shouldEqual(to!string(WebAppEnvironment.production));
+
+        auto allLoggers = getLoggers();
+        allLoggers.length.shouldEqual(2);
+
+        auto logger = cast(FileLogger) allLoggers[0];
+        logger.minLevel.shouldEqual(LogLevel.none);
+        logger.format.shouldEqual(FileLogger.Format.threadTime);
+
+        logger = cast(FileLogger) allLoggers[1];
+        logger.minLevel.shouldEqual(LogLevel.warn);
+        logger.format.shouldEqual(FileLogger.Format.thread);
+    }
+
+    runTest(&runApp, &testApp);
+}
+
+unittest
+{
+    // Do we display access logs in the development environment?
+    import std.net.curl : get;
+    import unit_threaded.assertions : shouldEqual;
+
+    void handler(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        import vibe.http.server : HTTPServerSettings;
+        import vibe.http.status : HTTPStatus;
+
+        auto vibedSettings = (() @trusted => getSetting("vibed").get!HTTPServerSettings)();
+
+        vibedSettings.accessLogToConsole.shouldEqual(true);
+
+        res.contentType = "text/html; charset=UTF-8";
+        res.writeBody("done", HTTPStatus.ok);
+    }
+
+    void runApp()
+    {
+        auto app = new WebApp;
+        app
+        .addRoute("/test/", &handler)
+        .addRoute("/stopapp/", &stopApp)
+        .run();
+    }
+
+    void testApp()
+    {
+        scope(exit) get("http://127.0.0.1:9000/stopapp/");
+        get("http://127.0.0.1:9000/test/");
+    }
+
+    runTest(&runApp, &testApp);
+}
+
+unittest
+{
+    // Do we suppress access logs in the production environment?
+    import std.net.curl : get;
+    import unit_threaded.assertions : shouldEqual;
+
+    void handler(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        import vibe.http.server : HTTPServerSettings;
+        import vibe.http.status : HTTPStatus;
+
+        auto vibedSettings = (() @trusted => getSetting("vibed").get!HTTPServerSettings)();
+
+        vibedSettings.accessLogToConsole.shouldEqual(false);
+
+        res.contentType = "text/html; charset=UTF-8";
+        res.writeBody("done", HTTPStatus.ok);
+    }
+
+    void runApp()
+    {
+        auto settings = new WebAppSettings;
+        settings.environment = WebAppEnvironment.production;
+
+        auto app = new WebApp(settings);
+        app
+        .addRoute("/test/", &handler)
+        .addRoute("/stopapp/", &stopApp)
+        .run();
+    }
+
+    void testApp()
+    {
+        scope(exit) get("http://127.0.0.1:9000/stopapp/");
+        get("http://127.0.0.1:9000/test/");
     }
 
     runTest(&runApp, &testApp);
