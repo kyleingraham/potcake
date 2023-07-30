@@ -2,9 +2,9 @@ module potcake.web.utils;
 @safe:
 
 /**
- * Get an environment variable and optionally convert it a given type.
+ * Get an environment variable and optionally convert it to a given type.
 
-   When given [bool] as the conversion type the following applies:
+   When given `bool` as the conversion type the following applies:
      - True values are "y", "yes", "t", "true", "on", and "1"
      - False values are "n", "no", "f", "false", "off", and "0"
      - Environment variable comparison is case-insensitive
