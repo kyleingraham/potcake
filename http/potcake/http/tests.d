@@ -49,7 +49,7 @@ unittest
         router.get("/hello/<notregistered:name>/", &testHandler);
     } catch (ImproperlyConfigured e) {
         assert(e.msg == "No path converter registered for 'notregistered'." );
-        return ;
+        return;
     }
 
     assert(false, "We did not raise an exception for an unregistered path converter");
@@ -274,6 +274,8 @@ unittest
 unittest
 {
     // Do we block invalid handlers?
+    import std.functional : toDelegate;
+
     void handler(HTTPServerRequest req, HTTPServerResponse res) {}
 
     class HandlerClass
@@ -283,6 +285,8 @@ unittest
 
     void typedHandler(HTTPServerRequest req, HTTPServerResponse res, int value) {}
 
+    void scopeHandler(scope HTTPServerRequest req, scope HTTPServerResponse res) {}
+
     void test(Handler)(Handler handler)
     {
         static assert(isValidHandler!Handler);
@@ -291,6 +295,7 @@ unittest
     test(&handler);
     test(&(HandlerClass.handler));
     test(&typedHandler);
+    test(toDelegate(&scopeHandler));
     static assert(!isValidHandler!(void function(int value)));
     static assert(!isValidHandler!(void function(HTTPServerRequest req)));
     static assert(!isValidHandler!(void function(HTTPServerResponse res)));
@@ -490,7 +495,7 @@ unittest {
         router.reverse(routeName);
     } catch (NoReverseMatch e) {
         assert(e.msg == "No route registered for name '" ~ routeName ~ "'", "Unexpected reverse error message");
-        return ;
+        return;
     }
 
     assert(false, "NoReverseMatch not thrown for route name with no registered route");
@@ -508,7 +513,7 @@ unittest {
             e.msg == "Count of path arguments given doesn't match count for those registered",
             "Unexpected reverse error message"
         );
-        return ;
+        return;
     }
 
     assert(false, "NoReverseMatch not thrown for mismatched argument counts");
@@ -528,7 +533,7 @@ unittest {
             e.msg == format("Reverse not found for '%s' with '%s'", routeName, 1451412341412414),
             "Unexpected reverse error message"
         );
-        return ;
+        return;
     }
 
     assert(false, "NoReverseMatch not thrown for error in path argument conversion");
