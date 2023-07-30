@@ -287,7 +287,7 @@ int main()
 }
 ```
 
-## Environment
+## Web App Environment
 You can control the behaviour of your web app based on the environment it's running in via the `WebAppSettings.environment`
 setting. Potcake is configured out of the box to react to `WebAppEnvironment` values but any string value can be used.
 
@@ -310,6 +310,16 @@ settings.logging = [
         LoggerSetting(LogLevel.warn, new FileLogger("application.log"), FileLogger.Format.threadTime),
     ],
 ];
+```
+
+## Environment Variables
+Potcake provides a convenience function for fetching environment variables. The function can also optionally convert
+variables to a given type. The interface is the same as the one for `std.process.environment.get`.
+
+For example:
+```d
+auto settings = new WebAppSettings;
+settings.vibed.port = getEnvVar!ushort("WEB_APP_PORT", "9000");
 ```
 
 ## FAQ
