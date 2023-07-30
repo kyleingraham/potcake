@@ -9,6 +9,8 @@ module potcake.web.utils;
      - False values are "n", "no", "f", "false", "off", and "0"
      - Environment variable comparison is case-insensitive
      - ConvException is thrown when conversion fails
+
+   Parameter types are set to match those of std.process.environment.get.
  */
 T getEnvironmentVariable(T = string)(scope const(char)[] name, string defaultValue = null)
 {
