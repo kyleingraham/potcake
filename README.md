@@ -222,42 +222,97 @@ postBuildCommands "\"$DUB_TARGET_PATH/$DUB_ROOT_PACKAGE_TARGET_NAME\" --collects
 See [collect_static_files](examples/collect_static_files) for a demonstration.
 
 ### Middleware
-Potcake provides a framework for middleware. Any middleware provided is run after a request has been routed.
+Potcake provides a framework for middleware. Middleware provided can be run at any point in the request handling 
+process.
 
-To add middleware, create a `MiddlewareDelegate`. A `MiddlewareDelegate` should accept and call a 
-`HTTPServerRequestDelegate` that represents the next middleware in the chain. A middleware can carry out actions both
-before and after the next middleware has been called. A `MiddlewareDelegate` should return a 
+#### Default Middleware
+In its out-of-the-box configuration Potcake provides a set of default middleware.
+
+`useIsSecureRequestMiddleware` - Record on request whether it was delivered via a secure channel.
+
+`useHstsMiddleware` - Inform browsers that your app should only be visited via HTTPS.
+
+`useStaticFilesMiddleware` - Serves static files.
+
+`useRoutingMiddleware` - Adds the ability to route a request to a handler. Must be used with and called before `useHandlerMiddleware`.
+
+`useBrowserHardeningMiddleware` - Harden the browser environment your web app is rendered in.
+
+`useHandlerMiddleware` - Calls a selected handler after routing. Must be used with and called after `useRoutingMiddleware`.
+
+When adding custom middleware take care to preserve the order recorded in `WebAppSettings.middleware`.
+
+#### Custom Middleware
+
+Middleware can be added via `WebAppSettings.middleware`. Middleware in that list are run forward and reverse in order,
+like layers in an onion i.e. middleware have the opportunity to run on a forward pass before their succeeding middleware
+is run and on a reverse pass after their succeeding middleware is run. For the following middleware definition:
+
+```d
+settings.middleware = [
+    &A, &B, &C,
+];
+```
+
+middleware will be run in this order:
+
+A -> B -> C -> B -> A
+
+Middleware can short-circuit the chain by omitting a call to their succeeding middleware. Potcake uses this to skip
+routing and handling middleware when serving a static file.
+
+To craft and add middleware, first create a `MiddlewareDelegate` or `MiddlewareFunction`. Both accept and call an 
+`HTTPServerRequestDelegate` that represents the next middleware in the chain. Both should return an 
 `HTTPServerRequestDelegate` that can be called by the middleware prior to it.
+
+Next create a function that accepts a `WebApp` and returns a `WebApp`. This function must call `WebApp.addMiddleware` to
+add your `MiddlewareDelegate`/`MiddlewareFunction`. You can safely add middleware anywhere in the middleware chain e.g. 
+pre-routing or directly pre-handling.
 
 For example:
 
 ```d
 import potcake.web;
 
-HTTPServerRequestDelegate middleware(HTTPServerRequestDelegate next)
+WebApp useMiddleware(WebApp webApp)
 {
-    void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+    HTTPServerRequestDelegate middleware(HTTPServerRequestDelegate next)
     {
-        // Run actions prior to the next middleware.
-        next(req, res);
-        // Run actions after the next middleware.
-    }
+        void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            // Run actions prior to the next middleware.
+            next(req, res);
+            // Run actions after the next middleware.
+        }
 
-    return &middlewareDelegate;
+        return &middlewareDelegate;
+    }
+    
+    webApp.addMiddleware(&middleware);
+    
+    return webApp;
 }
 
 int main()
 {
-    auto webApp = new WebApp;
-    webApp
+    auto settings = new WebAppSettings;
+    settings.middleware = [
+        &useIsSecureRequestMiddleware,
+        &useHstsMiddleware,
+        &useStaticFilesMiddleware,
+        &useRoutingMiddleware,
+        &useBrowserHardeningMiddleware,
+        &useMiddleware, // your middleware
+        &useHandlerMiddleware,
+    ];
+    
+    return new WebApp(settings)
     .addRoute("/", delegate void(HTTPServerRequest req, HTTPServerResponse res) {})
-    .addMiddleware(&middleware);
-
-    return webApp.run();
+    .run();
 }
 ```
 
-## Settings
+### Settings
 On initial setup, a Potcake `WebApp` accepts a settings class in the family of `WebAppSettings`. `WebAppSettings` has
 settings core to Potcake with the framework's defaults. 
 
@@ -287,11 +342,11 @@ int main()
 }
 ```
 
-## Web App Environment
+### Web App Environment
 You can control the behaviour of your web app based on the environment it's running in via the `WebAppSettings.environment`
 setting. Potcake is configured out of the box to react to `WebAppEnvironment` values but any string value can be used.
 
-## Logging
+### Logging
 Potcake allows for setting logging settings keyed on environment. This allows for:
 - varying logging between development and production
 - varying log levels and formats between loggers in an environment
@@ -312,7 +367,7 @@ settings.logging = [
 ];
 ```
 
-## Environment Variables
+### Environment Variables
 Potcake provides a convenience function for fetching environment variables. The function can also optionally convert
 variables to a given type. The interface is the same as the one for `std.process.environment.get`.
 
@@ -321,6 +376,12 @@ For example:
 auto settings = new WebAppSettings;
 settings.vibed.port = getEnvVar!ushort("WEB_APP_PORT", "9000");
 ```
+
+Environment variables can be converted to booleans using the following rules:
+
+```"y", "yes", "t", "true", "on", "1"``` map to `true`
+
+```"n", "no", "f", "false", "off", "0"``` map to `false`
 
 ## FAQ
 Q - Why the name Potcake?

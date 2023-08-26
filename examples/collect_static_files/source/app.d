@@ -15,11 +15,8 @@ int main(string[] args)
     settings.staticRoutePath = "/static/";
     settings.rootRouteConfig = routes;
 
-    auto webApp = new WebApp(settings);
-
-    return webApp
-    .serveStaticFiles()
-    .run(args); // For detection of the --collectstatic flag.
+    return new WebApp(settings)
+    .run(args); // args passed for detection of the --collectstatic flag.
 }
 
 void handler(HTTPServerRequest req, HTTPServerResponse res)

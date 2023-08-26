@@ -13,7 +13,7 @@ void runTest(void delegate() runAppFunction, void delegate() testAppFunction) @t
     import unit_threaded.assertions : shouldNotThrow;
 
     spawn(runAppFunction.funcptr);
-    Thread.sleep(dur!"msecs"(100));
+    Thread.sleep(dur!"msecs"(100)); // Raise this if tests failing due to unexplained early response writes.
 
     shouldNotThrow!HTTPStatusException(testAppFunction());
 }
@@ -208,7 +208,6 @@ unittest
         auto app = new WebApp(settings);
         app
         .addRoute("/stopapp/", &stopApp)
-        .serveStaticFiles()
         .run();
     }
 
@@ -505,7 +504,6 @@ unittest
         if (app.run(["", "--collectstatic"]) != 0)
             return;
 
-        app.serveStaticFiles();
         app.addRoute("/stopapp/", &stopApp);
         app.run();
     }

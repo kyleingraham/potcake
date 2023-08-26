@@ -186,6 +186,7 @@ alias RouteName = string;
     this()
     {
         addPathConverters();
+        middleware = [&routingMiddleware, &handlerMiddleware];
     }
 
     unittest
@@ -229,24 +230,43 @@ alias RouteName = string;
         handlerNeedsUpdate = true;
     }
 
+    /**
+       Clear all middleware from this router's middleware chain.
+
+       Call before adding your own middleware if middlware must run pre-routing or pre-handling.
+     */
+    void clearMiddleware()
+    {
+        this.middleware = [];
+        handlerNeedsUpdate = true;
+    }
+
     void handleRequest(HTTPServerRequest req, HTTPServerResponse res)
     {
         if (handlerNeedsUpdate)
-        {
             updateHandler();
-            rehashMaps();
-            handlerNeedsUpdate = false;
-        }
 
         handler(req, res);
     }
 
     private void updateHandler()
     {
-        handler = &routeRequest;
+        import vibe.core.log : logDebug;
+
+        void noopHandler(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            logDebug("noopHandler called");
+        }
+
+        handler = &noopHandler;
+
+        logDebug("Middleware count: %s", middleware.length);
 
         foreach_reverse (ref mw; middleware)
             handler = mw(handler);
+
+        rehashMaps();
+        handlerNeedsUpdate = false;
     }
 
     private void rehashMaps() @trusted
@@ -256,28 +276,104 @@ alias RouteName = string;
         routes = routes.rehash();
     }
 
-    private void routeRequest(HTTPServerRequest req, HTTPServerResponse res)
+    private const(HTTPServerRequestDelegate) getHandler(HTTPServerRequest req, HTTPServerResponse res)
     {
         import std.regex : matchAll;
 
         auto methodPresent = req.method in routes;
 
         if (methodPresent is null)
-            return ;
+            return null;
 
         foreach (route; routes[req.method])
         {
             auto matches = matchAll(req.requestURI, route.pathRegex);
 
             if (matches.empty())
-                continue ;
+                continue;
 
             foreach (i; 0 .. route.pathRegex.namedCaptures.length)
                 req.params[route.pathRegex.namedCaptures[i]] = matches.captures[route.pathRegex.namedCaptures[i]];
 
-            route.handler(req, res, route.pathCaptureGroups);
-            break ;
+            return (req, res) {
+                route.handler(req, res, route.pathCaptureGroups);
+            };
         }
+
+        return null;
+    }
+
+    private void routeRequest(HTTPServerRequest req, HTTPServerResponse res)
+    {
+        if (auto handler = getHandler(req, res))
+            handler(req, res);
+    }
+
+    /**
+       Adds the ability to route a request to a handler. Must be used with and called before useHandlerMiddleware.
+
+       This middleware selects a handler based on the URL path requested but does not call the handler.
+       useHandlerMiddleware covers that responsibility. Routing and handling are split to allow adding
+       pre-routing and pre-handling middleware.
+     */
+    Router useRoutingMiddleware()
+    {
+        addMiddleware(&routingMiddleware);
+        return this;
+    }
+
+    /**
+       Calls a selected handler after routing. Must be used with and called after useRoutingMiddleware.
+
+       This middleware calls the handler selected for a given handler by useRoutingMiddleware.
+       Routing and handling are split to allow adding pre-routing and pre-handling middleware.
+     */
+    Router useHandlerMiddleware()
+    {
+        addMiddleware(&handlerMiddleware);
+        return this;
+    }
+
+    private HTTPServerRequestDelegate routingMiddleware(HTTPServerRequestDelegate next) @safe
+    {
+        import vibe.core.log : logDebug;
+
+        logDebug("routingMiddleware added");
+
+        void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            logDebug("routingMiddleware, req.requestURI: %s", req.requestURI);
+
+            if (auto handler = getHandler(req, res))
+            {
+                logDebug("routingMiddleware, handler set");
+                    (() @trusted => req.context["handler"] = handler)();
+                next(req, res);
+            }
+
+            logDebug("routingMiddleware ended");
+        }
+
+        return &middlewareDelegate;
+    }
+
+    private HTTPServerRequestDelegate handlerMiddleware(HTTPServerRequestDelegate next)
+    {
+        import vibe.core.log : logDebug;
+
+        logDebug("handlerMiddleware added");
+
+        void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            logDebug("handlerMiddleware started");
+            auto handler = (() @trusted => req.context["handler"].get!(const(HTTPServerRequestDelegate)))();
+            handler(req, res);
+            logDebug("handlerMiddleware, handler called");
+            next(req, res);
+            logDebug("handlerMiddleware ended");
+        }
+
+        return &middlewareDelegate;
     }
 
     Router any(Handler)(string path, Handler handler, string routeName=null)
@@ -411,7 +507,7 @@ alias RouteName = string;
         }
     }
 
-    private ParsedPath parsePath(string path, bool isEndpoint=false)
+    ParsedPath parsePath(string path, bool isEndpoint=false)
     {
         import pegged.grammar;
 
@@ -440,24 +536,26 @@ Path:
             switch (p.name)
             {
                 case "Path":
-                return walkForGroups(p.children[0]);
+                    return walkForGroups(p.children[0]);
 
                 case "Path.PathCaptureGroups":
-                PathCaptureGroup[] result = [];
-                foreach (child; p.children)
-                    result ~= walkForGroups(child);
+                    PathCaptureGroup[] result = [];
+                    foreach (child; p.children)
+                        result ~= walkForGroups(child);
 
-                return result;
+                    return result;
 
                 case "Path.PathCaptureGroup":
-                if (p.children.length == 1)
-                // No path converter specified so we default to 'string'
-                    return [PathCaptureGroup("string", p[0].matches[0], p.matches.join)];
+                    if (p.children.length == 1)
+                    {
+                        // No path converter specified so we default to 'string'
+                        return [PathCaptureGroup("string", p[0].matches[0], p.matches.join)];
+                    }
 
-                else return [PathCaptureGroup(p[0].matches[0], p[1].matches[0], p.matches.join)];
+                    else return [PathCaptureGroup(p[0].matches[0], p[1].matches[0], p.matches.join)];
 
                 default:
-                assert(false);
+                    assert(false);
             }
         }
 
