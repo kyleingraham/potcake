@@ -507,7 +507,7 @@ alias RouteName = string;
         }
     }
 
-    ParsedPath parsePath(string path, bool isEndpoint=false)
+    private ParsedPath parsePath(string path, bool isEndpoint=false)
     {
         import pegged.grammar;
 
