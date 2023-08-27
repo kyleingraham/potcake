@@ -75,7 +75,7 @@ class WebAppSettings
     void initializeVibedSettings()
     {
         vibed = new HTTPServerSettings;
-        vibed.bindAddresses = ["localhost", "127.0.0.1"];
+        vibed.bindAddresses = ["127.0.0.1", "localhost", "[::1]"];
         vibed.port = 9000;
     }
 
