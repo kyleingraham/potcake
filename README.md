@@ -197,6 +197,10 @@ Potcake offers two ways to organize your static files (e.g. images, JavaScript, 
 1. In a central directory
 2. In multiple directories e.g. a directory per package in a larger project.
 
+In each case, static files will by default be served from a local directory named `'static'`
+at the route prefix `'/static/'`. These settings are controlled by `WebAppSettings.rootStaticDirectory`
+and `WebAppSettings.staticRoutePath` respectively.
+
 #### Central Directory
 1. Choose one directory in your project for storing all static files.
 2. Set `WebAppSettings.rootStaticDirectory` to the relative path to your static directory from your compiled executable. You will need to deploy this directory alongside your executable.
