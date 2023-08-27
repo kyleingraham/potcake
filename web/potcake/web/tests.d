@@ -13,7 +13,7 @@ void runTest(void delegate() runAppFunction, void delegate() testAppFunction) @t
     import unit_threaded.assertions : shouldNotThrow;
 
     spawn(runAppFunction.funcptr);
-    Thread.sleep(dur!"msecs"(100));
+    Thread.sleep(dur!"msecs"(300));
 
     shouldNotThrow!HTTPStatusException(testAppFunction());
 }

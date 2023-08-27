@@ -179,14 +179,14 @@ alias RouteName = string;
         ParsedPath[RouteName] pathMap;
         Route[][HTTPMethod] routes;
         MiddlewareDelegate[] middleware;
-        bool handlerNeedsUpdate = true;
         HTTPServerRequestDelegate handler;
     }
 
     this()
     {
         addPathConverters();
-        middleware = [&routingMiddleware, &handlerMiddleware];
+        useRoutingMiddleware();
+        useHandlerMiddleware();
     }
 
     unittest
@@ -227,7 +227,7 @@ alias RouteName = string;
     void addMiddleware(MiddlewareDelegate middleware)
     {
         this.middleware ~= middleware;
-        handlerNeedsUpdate = true;
+        updateHandler();
     }
 
     /**
@@ -238,18 +238,15 @@ alias RouteName = string;
     void clearMiddleware()
     {
         this.middleware = [];
-        handlerNeedsUpdate = true;
+        updateHandler();
     }
 
     void handleRequest(HTTPServerRequest req, HTTPServerResponse res)
     {
-        if (handlerNeedsUpdate)
-            updateHandler();
-
         handler(req, res);
     }
 
-    private void updateHandler()
+    void updateHandler()
     {
         import vibe.core.log : logDebug;
 
@@ -266,7 +263,6 @@ alias RouteName = string;
             handler = mw(handler);
 
         rehashMaps();
-        handlerNeedsUpdate = false;
     }
 
     private void rehashMaps() @trusted
@@ -448,6 +444,8 @@ alias RouteName = string;
 
         logTrace("Added %s route: %s", to!string(method), routes[method].back);
 
+        rehashMaps();
+
         return this;
     }
 
@@ -507,7 +505,7 @@ alias RouteName = string;
         }
     }
 
-    private ParsedPath parsePath(string path, bool isEndpoint=false)
+    ParsedPath parsePath(string path, bool isEndpoint=false)
     {
         import pegged.grammar;
 
