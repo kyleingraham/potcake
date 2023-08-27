@@ -299,12 +299,6 @@ alias RouteName = string;
         return null;
     }
 
-    private void routeRequest(HTTPServerRequest req, HTTPServerResponse res)
-    {
-        if (auto handler = getHandler(req, res))
-            handler(req, res);
-    }
-
     /**
        Adds the ability to route a request to a handler. Must be used with and called before useHandlerMiddleware.
 
@@ -340,10 +334,10 @@ alias RouteName = string;
         {
             logDebug("routingMiddleware, req.requestURI: %s", req.requestURI);
 
-            if (auto handler = getHandler(req, res))
+            if (auto routeHandler = getHandler(req, res))
             {
                 logDebug("routingMiddleware, handler set");
-                    (() @trusted => req.context["handler"] = handler)();
+                    (() @trusted => req.context["handler"] = routeHandler)();
                 next(req, res);
             }
 
