@@ -4,20 +4,22 @@ authors "Kyle Ingraham"
 copyright "Copyright © 2022, Kyle Ingraham"
 license "MIT"
 
+dependency "potcake:core" version="*"
 dependency "potcake:http" version="*"
 dependency "potcake:web" version="*"
 
 targetType "library"
 targetName "potcake"
 
-sourcePaths "http" "web"
-importPaths "http" "web"
+sourcePaths "core" "http" "web"
+importPaths "core" "http" "web"
 
 subPackage {
     name "http"
     description "Potcake web framework lower-level http components. Includes its vibe.d router."
 
     dependency "pegged" version="~>0.4.6"
+    dependency "potcake:core" version="*"
     dependency "vibe-core" version="~>2.2.0"
     dependency "vibe-d:http" version="~>0.9.6"
     dependency "vibe-d:inet" version="~>0.9.6"
@@ -36,6 +38,7 @@ subPackage {
     description "Potcake web framework higher-level web app components."
 
     dependency "diet-ng" version="~>1.8.1"
+    dependency "potcake:core" version="*"
     dependency "potcake:http" version="*"
     dependency "unit-threaded:assertions" version="~>2.1.6"
     dependency "urllibparse" version="~>0.1.0"
@@ -44,4 +47,14 @@ subPackage {
 
     sourcePaths "web"
     importPaths "web"
+}
+
+subPackage {
+    name "core"
+    description "Potcake core components used by its subpackages."
+
+    targetType "library"
+
+    sourcePaths "core"
+    importPaths "core"
 }

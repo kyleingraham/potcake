@@ -11,14 +11,6 @@ import std.variant : Variant;
 // vibe.d components that are part of potcake.http.router's public API
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
 
-class ImproperlyConfigured : Exception
-{
-    this(string msg, string file = __FILE__, size_t line = __LINE__) @safe
-    {
-        super(msg, file, line);
-    }
-}
-
 class NoReverseMatch : Exception
 {
     this(string msg, string file = __FILE__, size_t line = __LINE__) @safe
@@ -593,6 +585,8 @@ Path:
 
     private string getRegexCaptureGroup(string converterPathName, string pathParameter)
     {
+        import potcake.core.exceptions : ImproperlyConfigured;
+
         auto converterRegistered = converterPathName in converterMap;
         if (!converterRegistered)
             throw new ImproperlyConfigured("No path converter registered for '" ~ converterPathName ~ "'.");

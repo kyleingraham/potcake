@@ -2,6 +2,7 @@ module potcake.web.middleware;
 @safe:
 
 import potcake.web.app : WebApp;
+import std.typecons : Tuple;
 import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse;
 
 /**
@@ -56,33 +57,123 @@ WebApp useBrowserHardeningMiddleware(WebApp webApp)
     return webApp;
 }
 
+package const(string[]) getAllowedHosts()
+{
+    import potcake.web.app : getSetting;
+
+    auto environment = (() @trusted => getSetting("environment").get!(string))();
+    auto allowedHosts = (() @trusted => getSetting("allowedHosts").get!(string[][string]))();
+
+    return allowedHosts[environment];
+}
+
+package bool isAllowed(string host)
+{
+    import std.algorithm.searching : any;
+
+    return getAllowedHosts.any!(a => a == "*" || a == host);
+}
+
+package alias HostComponents = Tuple!(string, "host", string, "port");
+
+/**
+   Parse the host and port components from a request's Host header.
+
+   For reference:
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/host
+    - Django's HttpRequest.get_host and http.request.split_domain_port
+ */
+package HostComponents splitHost(HTTPServerRequest req)
+{
+    import std.algorithm.searching : endsWith;
+    import std.regex : ctRegex, matchFirst;
+    import std.uni : toLower;
+
+    string rawHost = req.host.toLower;
+
+    auto hostValidator = ctRegex!(r"^([a-z0-9.-]+|\[[a-f0-9]*:[a-f0-9\.:]+\])(:[0-9]+)?$");
+
+    if (rawHost.matchFirst(hostValidator).empty)
+        return HostComponents("", "");
+
+    // IPv6
+    if (rawHost.endsWith("]"))
+        return HostComponents(rawHost, "");
+
+    // Guaranteed host with port here.
+    ulong delimiterIndex = -1;
+
+    // Python's rsplit would be great here.
+    foreach_reverse(i, c; rawHost)
+    {
+        if (c == ':')
+        {
+            delimiterIndex = i;
+            break;
+        }
+    }
+
+    string host;
+    string port;
+
+    if (delimiterIndex == -1)
+        host = rawHost;
+    else
+    {
+        host = rawHost[0..delimiterIndex];
+        port = rawHost[delimiterIndex+1..$];
+    }
+
+    if (host.endsWith("."))
+        host = host[0..$-1];
+
+    return HostComponents(host, port);
+}
+
+package void validateHost(HTTPServerRequest req)
+{
+    import potcake.core.exceptions : DisallowedHost;
+
+    auto hostComponents = req.splitHost;
+
+    if (hostComponents.host.isAllowed)
+    {
+            (() @trusted => req.context["hostComponents"] = hostComponents)();
+        return;
+    }
+
+    throw new DisallowedHost("Invalid Host header. Add '" ~ hostComponents.host ~ "' to WebAppSettings.allowedHosts.");
+}
+
 /**
    Record on request whether it was delivered via a secure channel.
 
    A request's channel is considered secure when:
     - vibe.d directly facilitated the HTTPS channel for the request.
     - The request was delivered to a trusted proxy via HTTPS.
-        - Request's host must exist in WebAppSettings.secureProxies.
+        - Request's host must exist in WebAppSettings.allowedHosts.
         - Requests must have a header/value combo in WebAppSettings.secureSchemeHeaders.
             - Where there are multiple secure header/value combos all must be in WebAppSettings.secureSchemeHeaders.
  */
 WebApp useIsSecureRequestMiddleware(WebApp webApp)
 {
     import potcake.web.app : getSetting;
-    import std.algorithm.searching : any;
     import std.array : byPair;
+    import vibe.core.log : logDebug;
 
-    auto secureProxies = (() @trusted => getSetting("secureProxies").get!(string[]))();
+    auto behindSecureProxy = (() @trusted => getSetting("behindSecureProxy").get!(bool))();
     auto secureSchemeHeaders = (() @trusted => getSetting("secureSchemeHeaders").get!(string[string]))();
 
     bool isSecure(HTTPServerRequest req)
     {
+        // Called before checking `req.tls = true` so that proxied and directly delivered requests are both checked.
+        req.validateHost;
+
         if (req.tls)
+        // Directly serving requests with vibe.d with TLS.
             return true;
 
-        bool proxyTrusted = secureProxies.any!(a => a == req.host);
-
-        if (!proxyTrusted)
+        if (!behindSecureProxy)
             return false;
 
         bool requestSecure = false;
@@ -91,6 +182,12 @@ WebApp useIsSecureRequestMiddleware(WebApp webApp)
         {
             if ((schemeHeader.key in req.headers) is null)
                 continue;
+
+            logDebug(
+                "useIsSecureRequestMiddleware schemeHeader: %s: %s",
+                schemeHeader.key,
+                req.headers.get(schemeHeader.key)
+            );
 
             if (req.headers.get(schemeHeader.key) != schemeHeader.value)
             {
@@ -101,6 +198,8 @@ WebApp useIsSecureRequestMiddleware(WebApp webApp)
             requestSecure = true;
         }
 
+        logDebug("useIsSecureRequestMiddleware requestSecure: %s", requestSecure);
+
         return requestSecure;
     }
 
@@ -108,7 +207,9 @@ WebApp useIsSecureRequestMiddleware(WebApp webApp)
     {
         void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
         {
-            req.tls = isSecure(req);
+            logDebug("useIsSecureRequestMiddleware req.host: %s", req.host);
+                (() @trusted => req.context["isSecure"] = isSecure(req))();
+            logDebug("useIsSecureRequestMiddleware req.tls: %s", req.tls);
             next(req, res);
         }
 
@@ -134,7 +235,7 @@ WebApp useIsSecureRequestMiddleware(WebApp webApp)
 WebApp useHstsMiddleware(WebApp webApp)
 {
     import core.time : days, seconds;
-    import potcake.http.router : ImproperlyConfigured;
+    import potcake.core.exceptions : ImproperlyConfigured;
     import potcake.web.app : getSetting;
     import std.algorithm.searching : any;
     import std.conv : to;
@@ -159,16 +260,19 @@ WebApp useHstsMiddleware(WebApp webApp)
     if (hstsPreload)
         strictTransportSecurityValue ~= "; preload";
 
-    bool hostValidForHsts(HTTPServerRequest req)
+    bool validForHsts(string host)
     {
-        return !hstsExcludedHosts.any!(a => a == req.host);
+        return !hstsExcludedHosts.any!(a => a == host);
     }
 
     HTTPServerRequestDelegate hstsMiddleware(HTTPServerRequestDelegate next)
     {
         void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
         {
-            if (req.tls && hostValidForHsts(req))
+            auto requestIsSecure = (() @trusted => req.context["isSecure"].get!(const(bool)))();
+            auto host = (() @trusted => req.context["hostComponents"].get!(const(HostComponents)))().host;
+
+            if (requestIsSecure && validForHsts(host))
             {
                 res.headers["Strict-Transport-Security"] = strictTransportSecurityValue;
                 logTrace("Set HSTS header on response");
@@ -218,7 +322,7 @@ WebApp useHandlerMiddleware(WebApp webApp)
  */
 WebApp useStaticFilesMiddleware(WebApp webApp)
 {
-    import potcake.http.router : ImproperlyConfigured;
+    import potcake.core.exceptions : ImproperlyConfigured;
     import potcake.web.app : getSetting;
     import std.exception : enforce;
     import std.regex : matchAll;

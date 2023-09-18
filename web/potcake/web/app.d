@@ -132,7 +132,17 @@ class WebAppSettings
     ];
 
     /// Settings for useIsSecureRequestMiddleware. See its docs for details.
-    string[] secureProxies = ["127.0.0.1", "localhost", "[::1]"];
+    string[][string] allowedHosts;
+    bool behindSecureProxy = false;
+
+    void initializeAllowedHosts()
+    {
+        allowedHosts = [
+            WebAppEnvironment.development: ["127.0.0.1", "localhost", "[::1]"],
+            WebAppEnvironment.production: [],
+        ];
+    }
+
     string[string] secureSchemeHeaders;
 
     /// Initializes secureSchemeHeaders to defaults.
@@ -141,7 +151,7 @@ class WebAppSettings
         secureSchemeHeaders = [
             "X-Forwarded-Protocol": "ssl",
             "X-Forwarded-Proto": "https",
-            "X-Forwarded-Ssl": "on"
+            "X-Forwarded-Ssl": "on",
         ];
     }
 
@@ -161,6 +171,8 @@ class WebAppSettings
         initializeEnvironment();
         initializeVibedSettings();
         initializeLoggingSettings();
+        initializeSecureSchemeHeaders();
+        initializeAllowedHosts();
     }
 }
 
@@ -196,9 +208,9 @@ string reverse(T...)(string routeName, T pathArguments)
     return getInitializedApp().reverse(routeName, pathArguments);
 }
 
-static immutable char urlSeparator = '/';
+package static immutable char urlSeparator = '/';
 
-string staticPathImpl(string relativePath)
+private string staticPathImpl(string relativePath)
 {
     import urllibparse : urlJoin;
 
@@ -219,9 +231,41 @@ const(WebApp) getInitializedApp() {
 
 private WebApp initializedApp;
 
+/**
+ * Converts exceptions thrown in middleware to error responses.
+
+   Automatically applied to all WebApp middleware. Handles:
+    - SuspiciousOperation -> 400 response
+
+   Unhandled exceptions propagate to vibe.d where they are turned into 500 responses.
+ */
+private MiddlewareDelegate exceptionToRequest(MiddlewareDelegate middleware)
+{
+    import potcake.core.exceptions : SuspiciousOperation;
+    import vibe.http.status : HTTPStatus;
+
+    return (next) {
+        auto handler = middleware(next);
+
+        void exceptionToRequestDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            try
+            {
+                handler(req, res);
+            }
+            catch(SuspiciousOperation e)
+            {
+                res.writeBody(e.msg, HTTPStatus.badRequest, "text/html; charset=utf-8");
+            }
+        }
+
+        return &exceptionToRequestDelegate;
+    };
+}
+
 final class WebApp
 {
-    import potcake.http.router : ImproperlyConfigured;
+    import potcake.core.exceptions : ImproperlyConfigured;
     import vibe.http.server : HTTPServerSettings;
 
     private {
@@ -332,7 +376,7 @@ final class WebApp
 
     WebApp addMiddleware(MiddlewareDelegate middleware)
     {
-        router.addMiddleware(middleware);
+        router.addMiddleware(exceptionToRequest(middleware));
         return this;
     }
 

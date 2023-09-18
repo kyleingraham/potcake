@@ -41,6 +41,8 @@ unittest
 unittest
 {
     // Do we warn about unregistered path converters?
+    import potcake.core.exceptions : ImproperlyConfigured;
+
     void testHandler(HTTPServerRequest req, HTTPServerResponse res, string name) { }
 
     auto router = new Router;
