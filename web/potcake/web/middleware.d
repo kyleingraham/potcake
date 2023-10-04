@@ -207,9 +207,7 @@ WebApp useIsSecureRequestMiddleware(WebApp webApp)
     {
         void middlewareDelegate(HTTPServerRequest req, HTTPServerResponse res)
         {
-            logDebug("useIsSecureRequestMiddleware req.host: %s", req.host);
                 (() @trusted => req.context["isSecure"] = isSecure(req))();
-            logDebug("useIsSecureRequestMiddleware req.tls: %s", req.tls);
             next(req, res);
         }
 

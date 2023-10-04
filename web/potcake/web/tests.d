@@ -861,7 +861,7 @@ static foreach (hstsMaxAgeDaysValue; [1, 2])
 
 unittest
 {
-    // useHstsMiddleware - Test that excluded HSTS domains block settings the HSTS header.
+    // useHstsMiddleware - Test that excluded HSTS domains block setting the HSTS header.
 
     import unit_threaded.assertions : shouldBeNull, shouldEqual;
     import vibe.http.client : requestHTTP;
