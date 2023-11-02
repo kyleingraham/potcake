@@ -4,16 +4,21 @@ import potcake.web;
 
 int main(string[] args)
 {
-    auto routes = [
-        route("/", &handler),
-        route("/diet/<int:num>/", &dietHandler),
-    ];
-
     auto settings = new WebAppSettings;
     settings.staticDirectories = ["static_a", "static_b"];
     settings.rootStaticDirectory = "staticroot";
     settings.staticRoutePath = "/static/";
-    settings.rootRouteConfig = routes;
+    settings.rootRouteConfig = [
+        route("/", &handler),
+        route("/diet/<int:num>/", &dietHandler),
+    ];
+    settings.environment = "production";
+    settings.allowedHosts["production"] = ["127.0.0.1", "localhost", "[::1]"];
+    settings.behindSecureProxy = true;
+    settings.logging["production"] = [
+        LoggerSetting(LogLevel.info, new VibedStdoutLogger(), FileLogger.Format.threadTime),
+    ];
+    settings.vibed.accessLogToConsole = true;
 
     return new WebApp(settings)
     .run(args); // args passed for detection of the --collectstatic flag.

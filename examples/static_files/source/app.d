@@ -5,7 +5,6 @@ import potcake.web;
 int main()
 {
     auto settings = new WebAppSettings;
-
     // Static files will by default be served from a local directory named 'static' at the route prefix '/static/'.
     // These settings are controlled by WebAppSettings.rootStaticDirectory and WebAppSettings.staticRoutePath
     // respectively. Uncomment the following lines to make adjustments to these settings:

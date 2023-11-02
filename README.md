@@ -11,7 +11,7 @@ If you would like to see Potcake in action before reading further, take a look a
 you will find demonstration apps for Potcake's features.
 
 Each can be run by cloning this repo, navigating to the example app's base, and running `dub run` 
-(on macOS `MACOSX_DEPLOYMENT_TARGET=11 dub run`).
+(on macOS `MACOSX_DEPLOYMENT_TARGET=12 dub run`).
 
 [collect_static_files](examples/collect_static_files)
 
@@ -345,6 +345,17 @@ int main()
     return webApp.run();
 }
 ```
+
+#### Core Settings
+`behindSecureProxy` 
+
+Default: `false`
+
+Signal to Potcake that your app is running behind a proxy that you trust. This matters when you are using a proxy
+to provide HTTPS for your app. In order for Potcake to know that a request is secure, your proxy must signal that using
+headers. If your proxy isn't taking control and ignoring those headers from clients then your app is open to being
+coerced into carrying out sensitive actions over an insecure channel. Potcake forces the developer to opt in to trusting
+a proxy to prevent accidentally opening up their app to exploitation.
 
 ### Web App Environment
 You can control the behaviour of your web app based on the environment it's running in via the `WebAppSettings.environment`

@@ -150,7 +150,7 @@ package void validateHost(HTTPServerRequest req)
 
    A request's channel is considered secure when:
     - vibe.d directly facilitated the HTTPS channel for the request.
-    - The request was delivered to a trusted proxy via HTTPS.
+    - The request was delivered to a trusted proxy via HTTPS (WebAppSettings.behindSecureProxy = true).
         - Request's host must exist in WebAppSettings.allowedHosts.
         - Requests must have a header/value combo in WebAppSettings.secureSchemeHeaders.
             - Where there are multiple secure header/value combos all must be in WebAppSettings.secureSchemeHeaders.
