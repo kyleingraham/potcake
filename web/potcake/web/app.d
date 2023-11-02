@@ -11,6 +11,7 @@ import vibe.http.server : HTTPServerSettings;
 public import vibe.core.log : FileLogger, LogLevel;
 public import vibe.http.server : HTTPServerRequest, HTTPServerRequestDelegate, HTTPServerResponse, render;
 public import potcake.http.router : MiddlewareFunction, MiddlewareDelegate, pathConverter, PathConverterSpec;
+public import potcake.web.middleware : useIsSecureRequestMiddleware, useHstsMiddleware, useStaticFilesMiddleware, useRoutingMiddleware, useBrowserHardeningMiddleware, useHandlerMiddleware;
 
 /**
  * Fetch a setting from the currently running web app. Fetched settings are read-only.
@@ -22,7 +23,10 @@ alias SettingsDelegate = const(Variant) delegate(string setting);
 SettingsDelegate getSetting;
 
 alias RouteAdder = void delegate(WebApp webApp);
+
 alias RouteConfig = RouteAdder[];
+
+alias WebAppMiddleware = WebApp function(WebApp webApp);
 
 /**
  * Core settings for Potcake web apps. Provides reasonable defaults.
@@ -53,16 +57,16 @@ class WebAppSettings
     /**
      * Directory from which static files are served and also where they are collected into.
      *
-     * Static files are collected here by the '--collectstatic' utility. Relied on by [WebApp.serveStaticFiles()].
+     * Static files are collected here by the '--collectstatic' utility. Relied on by [useStaticFilesMiddleware].
      */
-    string rootStaticDirectory;
+    string rootStaticDirectory = "static";
 
     /**
      * The route prefix at which to serve static files e.g. "/static/".
      *
-     * Relied on by [WebApp.serveStaticFiles()].
+     * Relied on by [useStaticFilesMiddleware].
      */
-    string staticRoutePath;
+    string staticRoutePath = "/static/";
 
     /// Direct access to the settings controlling the underlying vibe.d server.
     HTTPServerSettings vibed;
@@ -71,7 +75,7 @@ class WebAppSettings
     void initializeVibedSettings()
     {
         vibed = new HTTPServerSettings;
-        vibed.bindAddresses = ["localhost", "127.0.0.1"];
+        vibed.bindAddresses = ["127.0.0.1", "localhost", "[::1]"];
         vibed.port = 9000;
     }
 
@@ -117,11 +121,58 @@ class WebAppSettings
         environment = processEnv.get("POTCAKE_ENVIRONMENT", WebAppEnvironment.development);
     }
 
+    /// Middlware for the web app. Called forward and in reverse for every request in the order listed.
+    WebAppMiddleware[] middleware = [
+        &useIsSecureRequestMiddleware,
+        &useHstsMiddleware,
+        &useStaticFilesMiddleware,
+        &useRoutingMiddleware,
+        &useBrowserHardeningMiddleware,
+        &useHandlerMiddleware,
+    ];
+
+    /// Settings for useIsSecureRequestMiddleware. See its docs for details.
+    string[][string] allowedHosts;
+    bool behindSecureProxy = false;
+
+    void initializeAllowedHosts()
+    {
+        allowedHosts = [
+            WebAppEnvironment.development: ["127.0.0.1", "localhost", "[::1]"],
+            WebAppEnvironment.production: [],
+        ];
+    }
+
+    string[string] secureSchemeHeaders;
+
+    /// Initializes secureSchemeHeaders to defaults.
+    void initializeSecureSchemeHeaders()
+    {
+        secureSchemeHeaders = [
+            "X-Forwarded-Protocol": "ssl",
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Ssl": "on",
+        ];
+    }
+
+    /// Settings for useHstsMiddleware. See its docs for details.
+    uint hstsMaxAgeDays = 30;
+    bool hstsIncludeSubdomains = false;
+    bool hstsPreload = false;
+    string[] hstsExcludedHosts = ["127.0.0.1", "localhost", "[::1]"];
+
+    /// Settings for useBrowserHardeningMiddleware. See its docs for details.
+    bool contentTypeNoSniff = true;
+    string referrerPolicy = "same-origin";
+    string crossOriginOpenerPolicy = "same-origin";
+
     this()
     {
         initializeEnvironment();
         initializeVibedSettings();
         initializeLoggingSettings();
+        initializeSecureSchemeHeaders();
+        initializeAllowedHosts();
     }
 }
 
@@ -157,9 +208,9 @@ string reverse(T...)(string routeName, T pathArguments)
     return getInitializedApp().reverse(routeName, pathArguments);
 }
 
-static immutable char urlSeparator = '/';
+package static immutable char urlSeparator = '/';
 
-string staticPathImpl(string relativePath)
+private string staticPathImpl(string relativePath)
 {
     import urllibparse : urlJoin;
 
@@ -180,9 +231,41 @@ const(WebApp) getInitializedApp() {
 
 private WebApp initializedApp;
 
+/**
+ * Converts exceptions thrown in middleware to error responses.
+
+   Automatically applied to all WebApp middleware. Handles:
+    - SuspiciousOperation -> 400 response
+
+   Unhandled exceptions propagate to vibe.d where they are turned into 500 responses.
+ */
+private MiddlewareDelegate exceptionToRequest(MiddlewareDelegate middleware)
+{
+    import potcake.core.exceptions : SuspiciousOperation;
+    import vibe.http.status : HTTPStatus;
+
+    return (next) {
+        auto handler = middleware(next);
+
+        void exceptionToRequestDelegate(HTTPServerRequest req, HTTPServerResponse res)
+        {
+            try
+            {
+                handler(req, res);
+            }
+            catch(SuspiciousOperation e)
+            {
+                res.writeBody(e.msg, HTTPStatus.badRequest, "text/html; charset=utf-8");
+            }
+        }
+
+        return &exceptionToRequestDelegate;
+    };
+}
+
 final class WebApp
 {
-    import potcake.http.router : ImproperlyConfigured;
+    import potcake.core.exceptions : ImproperlyConfigured;
     import vibe.http.server : HTTPServerSettings;
 
     private {
@@ -273,6 +356,16 @@ final class WebApp
             webAppSettings.vibed.accessLogToConsole = true;
     }
 
+    package WebApp addMiddleware(WebAppMiddleware[] middleware)
+    {
+        router.clearMiddleware();
+
+        foreach (ref addMiddlewareTo; middleware)
+            addMiddlewareTo(this);
+
+        return this;
+    }
+
     WebApp addMiddleware(MiddlewareFunction middleware)
     {
         import std.functional : toDelegate;
@@ -283,7 +376,7 @@ final class WebApp
 
     WebApp addMiddleware(MiddlewareDelegate middleware)
     {
-        router.addMiddleware(middleware);
+        router.addMiddleware(exceptionToRequest(middleware));
         return this;
     }
 
@@ -306,28 +399,21 @@ final class WebApp
         return router.reverse(routeName, pathArguments);
     }
 
-    WebApp serveStaticFiles()
+    package WebApp useRoutingMiddleware()
     {
-        import std.exception : enforce;
-
-        enforce!ImproperlyConfigured(
-            0 < webAppSettings.rootStaticDirectory.length &&
-            0 < webAppSettings.staticRoutePath.length,
-            "The 'rootStaticDirectory', 'staticRoutePath' settings must be set to serve static files."
-        );
-
-        return serveStaticFiles(webAppSettings.staticRoutePath, webAppSettings.rootStaticDirectory);
+        router.useRoutingMiddleware();
+        return this;
     }
 
-    private WebApp serveStaticFiles(string routePath, string directoryPath)
+    package WebApp useHandlerMiddleware()
     {
-        import std.string : stripRight;
-        import vibe.http.fileserver : HTTPFileServerSettings, serveStaticFiles;
-
-        auto routePathPrefix = routePath.stripRight("/");
-        auto settings = new HTTPFileServerSettings(routePathPrefix);
-        router.get(routePathPrefix ~ "<path:static_file_path>", serveStaticFiles(directoryPath, settings));
+        router.useHandlerMiddleware();
         return this;
+    }
+
+    package string getRegexPath(string path, bool isEndpoint=false)
+    {
+        return router.parsePath(path, isEndpoint).regexPath;
     }
 
     int run(string[] args = [])
@@ -337,6 +423,8 @@ final class WebApp
         import vibe.core.log : logInfo;
 
         addRoutes(webAppSettings.rootRouteConfig);
+
+        addMiddleware(webAppSettings.middleware);
 
         initializedApp = this;
 

@@ -41,6 +41,8 @@ unittest
 unittest
 {
     // Do we warn about unregistered path converters?
+    import potcake.core.exceptions : ImproperlyConfigured;
+
     void testHandler(HTTPServerRequest req, HTTPServerResponse res, string name) { }
 
     auto router = new Router;
@@ -333,6 +335,7 @@ unittest
 unittest
 {
     // Do we call middleware in the right order then the routes handler?
+    import unit_threaded.assertions : shouldEqual;
     import vibe.http.server : createTestHTTPServerRequest, createTestHTTPServerResponse;
     import vibe.inet.url : URL;
 
@@ -369,12 +372,15 @@ unittest
 
     auto router = new Router;
     router.get("/hello/", &handlerA);
+    router.clearMiddleware();
     router.addMiddleware(&middlewareA);
     router.addMiddleware(&middlewareB);
+    router.useRoutingMiddleware();
+    router.useHandlerMiddleware();
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/")), res);
-    assert(result == "ABCDE", "Did not call middleware ordered by first added to last then handler");
+    result.shouldEqual("ABCDE");
 }
 
 unittest
@@ -415,8 +421,11 @@ unittest
 
     auto router = new Router;
     router.get("/hello/", &handlerA);
+    router.clearMiddleware();
     router.addMiddleware(&middlewareA);
     router.addMiddleware(&middlewareB);
+    router.useRoutingMiddleware();
+    router.useHandlerMiddleware();
 
     auto res = createTestHTTPServerResponse();
     router.handleRequest(createTestHTTPServerRequest(URL("http://localhost/hello/")), res);
